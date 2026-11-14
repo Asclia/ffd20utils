@@ -1,5 +1,5 @@
 import { html, useState, useMemo, useEffect, useRef } from '../../vendor/ui.mjs';
-import { Section, Field, Text, TextArea, Num, Select, Check, Chips, SearchPicker, ListEditor, toast } from './components.js';
+import { Section, Field, Text, TextArea, Num, Select, Check, Chips, SearchPicker, ListEditor, toast, askText } from './components.js';
 import { compute, crAnalysis, newAttack, uid } from '../rules/engine.js';
 import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import {
@@ -390,8 +390,8 @@ function FeatsSection({ def, up, c, db, homebrew }) {
     up({ feats: [...def.feats, feat], toggles });
     void q;
   };
-  const addCustom = () => {
-    const name = prompt('Nome do feat:');
+  const addCustom = async () => {
+    const name = await askText('Nome do feat personalizado');
     if (name) up({ feats: [...def.feats, { id: uid(), name, param: '', bonus: false, source: 'custom' }] });
   };
   const featInfo = (name) => all.find((f) => f.name.toLowerCase() === name.toLowerCase());

@@ -70,7 +70,7 @@ export async function openStore() {
   if (location.protocol.startsWith('http')) {
     try {
       const r = await fetch('/api/ping', { cache: 'no-store' });
-      if (r.ok) return new ServerStore();
+      if (r.ok) { const s = new ServerStore(); s.dataDir = (await r.json()).data; return s; }
     } catch { /* static hosting */ }
   }
   return new BrowserStore();

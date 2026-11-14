@@ -142,3 +142,25 @@ export class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
+
+// In-app replacement for window.prompt() (not available in the desktop app).
+let askSetter = null;
+export function AskHost() {
+  const [req, setReq] = useState(null);
+  const [val, setVal] = useState('');
+  askSetter = (r) => { setVal(r.initial || ''); setReq(r); };
+  if (!req) return null;
+  const done = (v) => { req.resolve(v); setReq(null); };
+  return html`<${Modal} title=${req.label} onClose=${() => done(null)}>
+    <form onSubmit=${(e) => { e.preventDefault(); done(val.trim() || null); }}>
+      <input type="text" style="width:100%" value=${val} ref=${(el) => el && !el.dataset.f && (el.dataset.f = '1', el.focus(), el.select())} onInput=${(e) => setVal(e.target.value)} />
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button type="button" class="btn ghost" onClick=${() => done(null)}>Cancelar</button>
+        <button type="submit" class="btn primary">OK</button>
+      </div>
+    </form>
+  </${Modal}>`;
+}
+export function askText(label, initial = '') {
+  return new Promise((resolve) => (askSetter ? askSetter({ label, initial, resolve }) : resolve(window.prompt(label, initial))));
+}

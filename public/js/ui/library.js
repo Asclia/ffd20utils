@@ -1,5 +1,5 @@
 import { html, useState, useRef } from '../../vendor/ui.mjs';
-import { Field, Text, Check, toast } from './components.js';
+import { Field, Text, Check, toast, askText } from './components.js';
 import { uid } from '../rules/engine.js';
 import { crLabel } from '../rules/tables.js';
 import { folderPath } from './editor.js';
@@ -20,12 +20,12 @@ export function Library({ app, onOpen }) {
   const fp = (id) => folderPath(folders, id);
 
   const newFolder = async (parentId) => {
-    const name = prompt('Nome da nova pasta:');
+    const name = await askText('Nome da nova pasta');
     if (!name) return;
     await app.setFolders([...folders, { id: uid(), name: name.trim(), parentId: parentId || null }]);
   };
   const rename = async (f) => {
-    const name = prompt('Novo nome:', f.name);
+    const name = await askText('Novo nome da pasta', f.name);
     if (name) await app.setFolders(folders.map((x) => (x.id === f.id ? { ...x, name: name.trim() } : x)));
   };
   const remove = async (f) => {
@@ -160,7 +160,7 @@ function Settings({ app }) {
   const server = app.store.kind === 'server';
   return html`<div class="panel">
     <h4>Configurações</h4>
-    <p class="muted small">Armazenamento: ${server ? html`<b>arquivos locais</b> (pasta <code>userdata/</code> ao lado do programa)` : html`<b>navegador</b> (IndexedDB). Rode <code>node server.js</code> para salvar em arquivos.`}</p>
+    <p class="muted small">Armazenamento: ${server ? html`<b>arquivos locais</b> em <code>${app.store.dataDir || 'userdata/'}</code>` : html`<b>navegador</b> (IndexedDB). Rode <code>node server.js</code> para salvar em arquivos.`}</p>
     ${server ? html`
       <${Field} label="Pasta de exportação (ex.: seu vault do Obsidian)" wide><${Text} value=${s.exportDir || ''} placeholder=${'C:\\Users\\voce\\Obsidian\\Bestiario  ou  /home/voce/Obsidian/Bestiario'} onInput=${(v) => setS({ ...s, exportDir: v })} /></${Field}>
       <${Field} label="Subpasta de imagens"><${Text} value=${s.attachmentsFolder || ''} placeholder="attachments" onInput=${(v) => setS({ ...s, attachmentsFolder: v })} /></${Field}>

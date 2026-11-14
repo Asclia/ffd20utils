@@ -5,22 +5,27 @@ formato padrão do **Pathfinder 1e**. Você define as escolhas; o programa faz a
 automaticamente o kit de classe, tipo, subtipos, feats, MP, elementos e regras de chefe, sem impedir
 que você crie conteúdo próprio.
 
-Roda no navegador, em **Windows e Linux** (e macOS), sem instalar dependências além do Node.js.
+É um aplicativo de desktop para **Windows e Linux**: clique e ele abre na própria janela.
 
-## Como rodar
+## Instalação
 
-1. Instale o [Node.js](https://nodejs.org/) 18 ou mais novo.
-2. Inicie o programa:
-   - **Windows:** dê dois cliques em `start.bat`
-   - **Linux/macOS:** execute `./start.sh` (ou `node server.js --open`)
-3. O navegador abre em **http://localhost:7420**.
+Baixe o arquivo do seu sistema na página
+[Releases](https://github.com/Asclia/ffd20utils/releases) do repositório:
 
-A biblioteca fica salva em arquivos na pasta `userdata/` ao lado do programa (statblocks, pastas,
-homebrew, imagens e configurações). Para usar outra pasta: `FFD20_DATA=/caminho node server.js`.
-Para outra porta: `PORT=8080 node server.js`.
+| Sistema | Arquivo | Como abrir |
+|---|---|---|
+| Windows | `FFd20-Utils-…-instalador.exe` | Instala o programa e cria atalhos na Área de Trabalho e no Menu Iniciar. |
+| Windows | `FFd20-Utils-…-portable.exe` | Não instala nada: clique duas vezes e o programa abre. |
+| Linux | `FFd20-Utils-…-linux-x86_64.AppImage` | Clique com o botão direito → Propriedades → Permitir executar; depois clique duas vezes. |
+| Linux (Ubuntu/Debian) | `FFd20-Utils-…-linux-amd64.deb` | Clique duas vezes para instalar; o programa aparece no menu de aplicativos. |
 
-> Sem o servidor (por exemplo, hospedado como site estático), o programa continua funcionando,
-> mas salva no armazenamento do navegador (IndexedDB) e não grava direto no vault.
+> O Windows pode mostrar "O Windows protegeu o computador" na primeira vez, porque o executável
+> não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**.
+
+A biblioteca (statblocks, pastas, homebrew, imagens e configurações) fica salva na pasta de dados
+do usuário: `%APPDATA%\ffd20utils\biblioteca` no Windows e `~/.config/ffd20utils/biblioteca`
+no Linux. O caminho exato aparece em *Biblioteca → Configurações*. Atualizar ou reinstalar o
+programa não apaga a biblioteca.
 
 ## Abas
 
@@ -47,7 +52,7 @@ Para outra porta: `PORT=8080 node server.js`.
 ## Imagens
 
 Cada statblock tem um espaço para imagem: cole um **link (URL)** ou use um **arquivo local**
-(botão, arrastar e soltar ou Ctrl+V). Arquivos locais são copiados para `userdata/images/`.
+(botão, arrastar e soltar ou Ctrl+V). Arquivos locais são copiados para a pasta `images` da biblioteca.
 
 ## Exportar para o Obsidian
 
@@ -82,8 +87,10 @@ feats em `public/js/rules/featEffects.js`.
 
 ## Desenvolvimento
 
-- Sem etapa de build: HTML + módulos ES + [Preact](https://preactjs.com/) e [htm](https://github.com/developit/htm) empacotados em `public/vendor/` (licenças MIT incluídas).
-- `server.js`: servidor HTTP local sem dependências (arquivos estáticos + API da biblioteca).
+- Sem etapa de build na interface: HTML + módulos ES + [Preact](https://preactjs.com/) e [htm](https://github.com/developit/htm) empacotados em `public/vendor/` (licenças MIT incluídas).
+- `server.js`: servidor HTTP local sem dependências (arquivos estáticos + API da biblioteca). O app desktop (`desktop/main.js`, [Electron](https://www.electronjs.org/)) o inicia por dentro e mostra a interface numa janela.
+- `npm install` e depois `npm run app` abre o app desktop a partir do código; `node server.js --open` abre a mesma interface no navegador.
+- Executáveis: `npm run dist:win` e `npm run dist:linux` (saem em `dist/`). Ao enviar uma tag de versão (`git tag v1.0.1 && git push origin v1.0.1`), o GitHub Actions compila Windows e Linux e publica um Release com os arquivos.
 - Testes do motor de regras: `npm test`.
 
 Ferramenta de fã, sem afiliação com a Square Enix, a Paizo ou a equipe do FFd20.

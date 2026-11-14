@@ -4,11 +4,78 @@
   "description": "Criador de monstros e NPCs para Final Fantasy d20 (FFd20) com statblocks no formato Pathfinder 1e.",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "app": "electron .",
     "start": "node server.js --open",
     "serve": "node server.js",
     "test": "node test/engine.test.mjs",
-    "build-data": "python3 tools/build_data.py"
+    "build-data": "python3 tools/build_data.py",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "main": "desktop/main.js",
+  "author": {
+    "name": "FFd20 Utils"
+  },
+  "homepage": "https://github.com/Asclia/ffd20utils",
+  "build": {
+    "appId": "com.ffd20utils.app",
+    "productName": "FFd20 Utils",
+    "executableName": "ffd20-utils",
+    "artifactName": "FFd20-Utils-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "server.js",
+      "desktop/**",
+      "public/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icon.ico"
+    },
+    "portable": {
+      "artifactName": "FFd20-Utils-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FFd20 Utils",
+      "artifactName": "FFd20-Utils-${version}-instalador.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "desktop/icon.png",
+      "category": "Game",
+      "synopsis": "Criador de monstros e NPCs para FFd20",
+      "maintainer": "FFd20 Utils <ffd20utils@users.noreply.github.com>"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
   }
 }

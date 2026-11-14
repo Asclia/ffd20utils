@@ -5,7 +5,7 @@ import { Editor } from './ui/editor.js';
 import { Bestiary } from './ui/bestiary.js';
 import { Library } from './ui/library.js';
 import { Homebrew } from './ui/homebrew.js';
-import { Toasts, toast, ErrorBoundary } from './ui/components.js';
+import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
 import { debounce, deepClone } from './util.js';
 
 const TABS = [
@@ -138,6 +138,7 @@ function App() {
     </${ErrorBoundary}></main>
     <footer class="foot">Regras: <a href="https://finalfantasyd20.com/" target="_blank" rel="noopener">finalfantasyd20.com</a> (FFd20) e <a href="https://www.d20pfsrd.com/" target="_blank" rel="noopener">d20pfsrd.com</a> (Pathfinder OGL). Ferramenta de fã, sem afiliação.</footer>
     <${Toasts} />
+    <${AskHost} />
   </div>`;
 }
 

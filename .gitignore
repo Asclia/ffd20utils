@@ -3,3 +3,4 @@ userdata/
 .DS_Store
 *.tmp
 __pycache__/
+dist/

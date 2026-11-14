@@ -8,16 +8,19 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { exec } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
-const DATA = path.resolve(process.env.FFD20_DATA || path.join(__dirname, 'userdata'));
-const ENTRIES = path.join(DATA, 'entries');
-const IMAGES = path.join(DATA, 'images');
-const PORT = Number(process.env.PORT || 7420);
-const HOST = process.env.HOST || '127.0.0.1';
+// Data folder; set by startServer() (desktop app: the OS app-data folder; CLI: ./userdata).
+let DATA, ENTRIES, IMAGES;
+function setDataDir(dir) {
+  DATA = path.resolve(dir);
+  ENTRIES = path.join(DATA, 'entries');
+  IMAGES = path.join(DATA, 'images');
+  for (const d of [DATA, ENTRIES, IMAGES]) fs.mkdirSync(d, { recursive: true });
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -27,7 +30,6 @@ const MIME = {
 };
 const IMAGE_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp', 'image/avif': '.avif', 'image/svg+xml': '.svg' };
 
-for (const dir of [DATA, ENTRIES, IMAGES]) fs.mkdirSync(dir, { recursive: true });
 
 const readJSON = async (file, fallback) => {
   try { return JSON.parse(await fsp.readFile(file, 'utf8')); } catch { return fallback; }
@@ -178,12 +180,31 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
-  console.log(`FFd20 Utils rodando em ${url}`);
-  console.log(`Biblioteca salva em: ${DATA}`);
-  if (process.argv.includes('--open')) {
-    const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
-    exec(cmd, () => {});
-  }
-});
+// Starts the server. Tries `port` first and falls back to any free port if it is taken.
+export function startServer({ dataDir, port = 7420, host = '127.0.0.1' } = {}) {
+  setDataDir(dataDir || path.join(__dirname, 'userdata'));
+  const listen = (p) => new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(p, host, () => { server.off('error', reject); resolve(server.address().port); });
+  });
+  return listen(port).catch((e) => {
+    if (e.code !== 'EADDRINUSE') throw e;
+    return listen(0);
+  }).then((p) => ({ server, url: `http://${host === '0.0.0.0' ? 'localhost' : host}:${p}`, dataDir: DATA }));
+}
+
+// Command-line use: node server.js [--open]
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  startServer({
+    dataDir: process.env.FFD20_DATA || path.join(__dirname, 'userdata'),
+    port: Number(process.env.PORT || 7420),
+    host: process.env.HOST || '127.0.0.1',
+  }).then(({ url, dataDir }) => {
+    console.log(`FFd20 Utils rodando em ${url}`);
+    console.log(`Biblioteca salva em: ${dataDir}`);
+    if (process.argv.includes('--open')) {
+      const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+      exec(cmd, () => {});
+    }
+  });
+}
