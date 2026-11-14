@@ -2,9 +2,13 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { compute, newCreature, newAttack } from '../public/js/rules/engine.js';
 import { buildStatblock, statblockHTML, statblockMarkdown } from '../public/js/rules/statblock.js';
+import { makeItem, classicItems, parseItemEffects } from '../public/js/rules/equipment.js';
 const classes = JSON.parse(readFileSync(new URL('../public/data/classes.json', import.meta.url)));
 const races = JSON.parse(readFileSync(new URL('../public/data/races.json', import.meta.url)));
-const db = { classesById: Object.fromEntries(classes.map((c) => [c.id, c])), racesById: Object.fromEntries(races.map((r) => [r.id, r])), homebrew: {} };
+const load = (f) => JSON.parse(readFileSync(new URL(`../public/data/${f}`, import.meta.url)));
+const archetypes = load('archetypes.json');
+const db = { classesById: Object.fromEntries(classes.map((c) => [c.id, c])), racesById: Object.fromEntries(races.map((r) => [r.id, r])), homebrew: {},
+  talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])), items: load('items.json') };
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('ok -', name); };
 
@@ -147,5 +151,70 @@ t('Two-weapon fighting penalties and off-hand Str', () => {
   d.feats = [{ id: 'twf', name: 'Two-Weapon Fighting' }];
   c = compute(d, db);
   assert.equal(c.attacks.melee[0], 'short sword +5 (1d6+3/19–20), dagger +5 (1d4+1/19–20)');
+});
+t('Equipment: magic weapon, armor, belt, ring, gear lines (Fran-like archer)', () => {
+  const d = newCreature('npc');
+  d.raceId = 'viera';
+  d.abilities = { str: 12, dex: 15, con: 16, int: 12, wis: 12, cha: 10 };
+  d.abilityAdjust.dex = 2;
+  d.classes = [{ id: 'c', classId: 'archer', level: 10 }];
+  const bow = newAttack('ranged', false); bow.name = 'longbow'; bow.dice = '1d8'; bow.critRange = 20; bow.critMult = 3; bow.enhancement = 3;
+  d.attacks = [bow];
+  const classic = classicItems();
+  d.equipment.armor = { name: 'leather', bonus: 2, maxDex: 6, acp: 0, enh: 3, specials: [], price: 10 };
+  d.equipment.slots.belt = makeItem(classic.find((x) => x.name === 'Belt of Incredible Dexterity +4'), 'belt');
+  d.equipment.slots.ring1 = makeItem(classic.find((x) => x.name === 'Ring of Protection +2'), 'ring1');
+  d.equipment.consumables = [{ id: 'p', name: 'Hi-Potion', qty: 2, price: 300 }];
+  const c = compute(d, db);
+  assert.equal(c.abilities.dex, 15 + 2 + 2 + 4);   // base + viera + level + belt
+  assert.equal(c.ac.ac, 10 + 5 + 6 + 2);            // +5 armor, +6 Dex, +2 deflection
+  assert.ok(c.ac.parts.some(([v, n]) => v === 2 && n === 'deflection'));
+  assert.equal(c.attackDetails[0].att, 7 + 6 + 3); // BAB +7 (archer 10), Dex +6, +3 bow
+  const md = statblockMarkdown(buildStatblock(d, c, db), d, c);
+  assert.match(md, /\*\*Combat Gear\*\* Hi-Potion \(2\)/);
+  assert.match(md, /\*\*Other Gear\*\* \+3 longbow, \+3 leather, Belt of Incredible Dexterity \+4, Ring of Protection \+2/);
+});
+
+t('FFd20 item text becomes effects (status immunity, weapon rider, conditional Str)', () => {
+  const glass = parseItemEffects('This belt grants a +4 enhancement bonus to Strength and Constitution, and prevents the wearer from being inflicted with Poison status.');
+  assert.deepEqual(glass.mods.map((m) => [m.target, m.value, m.type]), [['str', 4, 'enhancement'], ['con', 4, 'enhancement']]);
+  assert.deepEqual(glass.immunities, ['poison']);
+  assert.equal(parseItemEffects('This ring adds +1d6 points of fire elemental damage to melee/ranged weapon attacks.').rider, '1d6 fire');
+  assert.equal(parseItemEffects('These gloves grant a +6 enhancement bonus to Strength but only while at full health.').mods[0].cond, 'while at full health');
+  const d = newCreature('monster'); d.racialHD = 3;
+  const sword = newAttack('melee', false); d.attacks = [sword];
+  d.equipment.slots.ring1 = makeItem({ name: 'Fire Ring', text: 'This ring adds +1d6 points of fire elemental damage to melee/ranged weapon attacks.' }, 'ring1');
+  d.equipment.slots.neck = makeItem({ name: 'Star Pendant', text: 'This pendant prevents the wearer from being inflicted with Poison status.' }, 'neck');
+  const c = compute(d, db);
+  assert.match(c.attacks.melee[0], /plus 1d6 fire\)$/);
+  assert.ok(c.immunities.includes('poison'));
+});
+
+t('Archetype replaces class features; talents limited by level', () => {
+  const d = newCreature('npc');
+  d.classes = [{ id: 'k', classId: 'knight', level: 8, archetypes: ['knight-aggressor'] }];
+  let c = compute(d, db);
+  const names = c.classFeatureList.filter((f) => !f.replacedBy).map((f) => f.name);
+  assert.ok(names.includes('Enhanced Intimidation'));
+  assert.ok(!names.includes('Defend Ally'));
+  assert.ok(c.classFeatureList.find((f) => f.name === 'Defend Ally').replacedBy.startsWith('Aggressor'));
+  const g = c.talentGroups.find((x) => x.group === 'Knight Talents');
+  assert.equal(g.allowed, 4);  // knight talents at 2, 4, 6, 8
+  d.talents = ['Armored Bastion', 'Barricade'].map((name, i) => ({ id: String(i), classId: 'knight', group: 'Knight Talents', name, placement: 'group' }));
+  c = compute(d, db);
+  const md = statblockMarkdown(buildStatblock(d, c, db), d, c);
+  assert.match(md, /knight talents \[Armored Bastion, Barricade\]/);
+  assert.match(md, /Hume knight \(aggressor\) 8|knight \(aggressor\) 8/);
+});
+
+t('Special Abilities line sits under Special Attacks', () => {
+  const d = newCreature('monster');
+  d.racialHD = 4;
+  d.abilitiesList = [{ id: 'a', name: 'Targeting Shot', kind: 'Ex', placement: 'specialAbility', short: 'targeting shot', text: '' },
+    { id: 'b', name: 'Aim', kind: 'Ex', placement: 'specialAttack', short: 'aim (+3)', text: '' }];
+  const md = statblockMarkdown(buildStatblock(d, compute(d, db), db), d, compute(d, db));
+  const i = md.indexOf('**Special Attacks** aim (+3)');
+  const j = md.indexOf('**Special Abilities** targeting shot');
+  assert.ok(i > 0 && j > i, 'order');
 });
 console.log(`${passed} tests passed`);

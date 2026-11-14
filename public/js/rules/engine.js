@@ -7,6 +7,7 @@ import {
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
 import { featEffect, featKey } from './featEffects.js';
+import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS } from './equipment.js';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -39,7 +40,7 @@ export function newCreature(mode = 'monster') {
     dr: '', sr: null, srAuto: false, fastHealing: '', regeneration: '', defensiveText: '', weaknessesText: '',
     caster: { tier: 'none', ability: 'int', mpBonus: 0, cl: null, spells: [], sla: [], slaCL: null, listName: '' },
     classFeatures: {}, limitBreaksEnabled: false, pcWealth: false,
-    abilitiesList: [], modifiers: [],
+    abilitiesList: [], modifiers: [], equipment: emptyEquipment(), talents: [],
     tactics: { before: '', during: '', morale: '' },
     statusInflicts: '',
     createdAt: Date.now(), updatedAt: Date.now(),
@@ -51,7 +52,7 @@ export function newAttack(kind = 'melee', natural = false) {
     id: uid(), name: natural ? 'claw' : 'longsword', plural: '', kind, natural, count: natural ? 2 : 1,
     dice: natural ? '1d6' : '1d8', critRange: natural ? 20 : 19, critMult: 2, hands: 'one', light: false, finesse: false,
     primary: true, enhancement: 0, attackBonus: 0, damageBonus: 0, dmgAbility: 'auto', touch: false,
-    extra: '', group: 1, iterative: !natural, thrown: false, range: '',
+    extra: '', group: 1, iterative: !natural, thrown: false, range: '', masterwork: false, specials: [], basePrice: 0, notGear: natural,
   };
 }
 
@@ -107,6 +108,13 @@ export function compute(def, db) {
   const addMod = (m) => mods.push(m);
   for (const m of d.modifiers || []) if (m.enabled !== false && m.target) addMod({ ...m, value: Number(m.value) || 0, source: m.note || 'custom' });
   for (const s of subtypeDefs) for (const m of s.mods || []) addMod({ ...m, source: s.name });
+  // ---- equipment (body slots + slotless): modifiers, immunities, granted feats, weapon riders
+  const eq = d.equipment || emptyEquipment();
+  const wornItems = [...SLOTS.map(([k]) => eq.slots?.[k]), ...(eq.slots ? [] : []), ...(eq.slotless || [])].filter((x) => x && x.name && x.active !== false);
+  out.wornItems = wornItems;
+  for (const it of wornItems) {
+    for (const m of it.mods || []) if (m.target) addMod({ ...m, value: Number(m.value) || 0, cond: m.cond || '', source: it.name, type: m.type === 'armor-item' ? 'armor-item' : m.type });
+  }
 
   // ---- abilities
   const abil = {};
@@ -165,11 +173,12 @@ export function compute(def, db) {
   const ctx = { bab, hd, cl, abil, m, skillRanks, size, isBoss: isBossTier };
   const seen = {};
   out.feats = [];
-  for (const f of d.feats || []) {
+  const itemFeats = wornItems.flatMap((it) => (it.feats || []).map((name) => ({ id: `item:${it.id}:${name}`, name, fromItem: it.name })));
+  for (const f of [...(d.feats || []), ...itemFeats]) {
     const key = featKey(f.name);
     const eff = featEffect(f.name) || (hb.feats || []).find((h) => featKey(h.name) === key);
     const toggleOn = !!(d.toggles || {})[f.id || key];
-    out.feats.push({ ...f, automated: !!(eff && (eff.mods || eff.attack || eff.flag)) });
+    if (!f.fromItem) out.feats.push({ ...f, automated: !!(eff && (eff.mods || eff.attack || eff.flag)) });
     if (!eff) continue;
     if (seen[key] && !eff.stack && !eff.param) continue;
     seen[key] = true;
@@ -242,7 +251,8 @@ export function compute(def, db) {
   for (const [n, die] of dicePieces) merged[die] = (merged[die] || 0) + n;
   const diceExpr = Object.entries(merged).sort((a, b) => b[0] - a[0]).map(([die, n]) => `${n}d${die}`).join('+') || '0';
   out.hp = { avg: hpAvg, max: hpMax, expr: diceExpr + (hpFlat ? (hpFlat > 0 ? `+${hpFlat}` : `${hpFlat}`) : ''), mult: hpMult };
-  out.hpExtra = [d.fastHealing && `fast healing ${d.fastHealing}`, d.regeneration && `regeneration ${d.regeneration}`].filter(Boolean);
+  const itemFH = wornItems.map((it) => it.fastHealing).filter(Boolean);
+  out.hpExtra = [d.fastHealing && `fast healing ${d.fastHealing}`, !d.fastHealing && itemFH[0] && `fast healing ${itemFH[0]}`, d.regeneration && `regeneration ${d.regeneration}`].filter(Boolean);
   if (flags.forceField) out.hpExtra.push(`force field ${hd * 5} hp`);
 
   // ---- MP & spells
@@ -292,6 +302,16 @@ export function compute(def, db) {
     else acMods.push({ target: 'ac', value: b, type: k, source: it.name });
     acp += Number(it.acp) || 0;
   }
+  // equipped armor & shield (Equipment section): base bonus + enhancement; masterwork/magic reduce ACP by 1
+  for (const [k, it] of [['armor', eq.armor], ['shield', eq.shield]]) {
+    if (!it || !it.name) continue;
+    const b = (Number(it.bonus) || 0) + (Number(it.enh) || 0);
+    if (k === 'armor') armorBonus = Math.max(armorBonus, b);
+    else shieldBonus = Math.max(shieldBonus, b);
+    if (it.maxDex !== '' && it.maxDex !== null && it.maxDex !== undefined) maxDex = Math.min(maxDex, Number(it.maxDex));
+    acp += Math.max(0, (Number(it.acp) || 0) - (it.masterwork || Number(it.enh) ? 1 : 0));
+  }
+  armorBonus = Math.max(armorBonus, ...acMods.filter((x) => x.type === 'armor-item').map((x) => x.value), 0);
   const armorFeat = acMods.filter((x) => x.type === 'armor-feat' || x.type === 'armor-feat2').reduce((s, x) => s + x.value, 0);
   const shieldFeat = acMods.filter((x) => x.type === 'shield-feat' || x.type === 'shield-feat2').reduce((s, x) => s + x.value, 0);
   if (armorBonus) armorBonus += armorFeat;
@@ -301,7 +321,7 @@ export function compute(def, db) {
   const dexToAC = Math.min(m.dex, maxDex);
   const other = {};
   for (const x of acMods) {
-    if (['armor-feat', 'armor-feat2', 'shield-feat', 'shield-feat2', 'natural-feat', 'natural'].includes(x.type)) continue;
+    if (['armor-feat', 'armor-feat2', 'shield-feat', 'shield-feat2', 'natural-feat', 'natural', 'armor-item'].includes(x.type)) continue;
     const t = x.type || 'untyped';
     if (t === 'dodge' || t === 'untyped' || x.value < 0) other[t] = (other[t] || 0) + x.value;
     else other[t] = Math.max(other[t] ?? -Infinity, x.value);
@@ -369,7 +389,7 @@ export function compute(def, db) {
         const dmgAbilScore = a.dmgAbility === 'dex' ? m.dex : a.dmgAbility === 'cha' ? m.cha : m.str;
         let dmgAbil = dmgMult === 0 ? 0 : (dmgAbilScore < 0 ? dmgAbilScore : Math.floor(dmgAbilScore * dmgMult));
         const ax = { ...a, _dmgMult: dmgMult };
-        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
+        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + (a.masterwork && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
         let dmg = dmgAbil + (Number(a.enhancement) || 0) + (Number(a.damageBonus) || 0) + dmgMods + (kind === 'melee' ? dmgMelee : dmgRanged);
         let critRange = Number(a.critRange) || 20;
         let diceSteps = 0;
@@ -404,9 +424,21 @@ export function compute(def, db) {
         const count = Number(a.count) || 1;
         const label = count > 1 ? `${count} ${a.plural || pluralize(a.name)}` : a.name;
         const enh = Number(a.enhancement) || 0;
-        const prefix = enh && !a.natural && !/^[+]\d/.test(a.name) ? `+${enh} ` : '';
+        const specialWords = (a.specials || []).map((x) => x.toLowerCase()).join(' ');
+        const prefix = (!a.natural && !/^[+]\d/.test(a.name) ? (enh ? `+${enh} ` : a.masterwork ? 'mwk ' : '') : '') + (specialWords && !a.natural ? `${specialWords} ` : '');
         const crit = (critRange < 20 ? `/${critRange}–20` : '') + (Number(a.critMult) > 2 ? `/×${a.critMult}` : '');
-        const dmgStr = `${dice}${dmg ? sign(dmg) : ''}${crit}${a.extra ? ` ${a.extra.trim().startsWith('plus') ? '' : 'plus '}${a.extra.trim()}` : ''}`;
+        const riders = [];
+        if (!a.natural) {
+          for (const sp of a.specials || []) {
+            const def0 = (db.items?.weaponSpecials || []).find((x) => x.name === sp);
+            const r = def0 ? weaponSpecialRider(def0.text) : '';
+            if (r) riders.push(r);
+          }
+          for (const it of wornItems) if (it.rider) riders.push(it.rider);
+        }
+        const extraTxt = (a.extra || '').trim().replace(/^plus\s+/i, '');
+        if (extraTxt) riders.push(extraTxt);
+        const dmgStr = `${dice}${dmg ? sign(dmg) : ''}${crit}${riders.length ? ` plus ${riders.join(' and ')}` : ''}`;
         const touch = a.touch ? ' touch' : '';
         const text = `${prefix}${label} ${seq.map(sign).join('/')}${touch} (${dmgStr})`;
         parts.push(text);
@@ -497,6 +529,7 @@ export function compute(def, db) {
     for (const [el, v] of Object.entries(st.elements || {})) apply(el, v);
     for (const [el, v] of Object.entries(st.resist || {})) resistAmt[el] = Math.max(resistAmt[el] || 0, v);
   }
+  for (const it of wornItems) for (const el of it.strong || []) if (ELEMENTS.includes(el)) apply(el, 'strong');
   // weakness vs immunity from multiple sources: immunity wins (rank)
   for (const el of ELEMENTS) {
     const o = d.elementOverrides?.[el];
@@ -517,6 +550,7 @@ export function compute(def, db) {
   for (const x of type.immunities || []) imm.add(x);
   for (const st of subtypeDefs) for (const x of st.immunities || []) imm.add(x);
   if (isBossTier) for (const x of BOSS_IMMUNITIES) if (!(boss === 'super' && x === 'stun')) imm.add(x);
+  for (const it of wornItems) for (const x of it.immunities || []) imm.add(x);
   for (const x of d.immunities || []) imm.add(x);
   for (const x of d.immunitiesRemoved || []) imm.delete(x);
   if (imm.has('death effects')) imm.delete('death');
@@ -555,24 +589,66 @@ export function compute(def, db) {
   const abilities = [];
   for (const st of subtypeDefs) for (const ab of st.abilities || []) abilities.push({ ...ab, origin: st.name });
   for (const ab of d.abilitiesList || []) abilities.push({ ...ab, origin: 'custom' });
-  // class features
+  // class features (+ archetype swaps) and class talents
   out.classFeatureList = [];
+  out.talentGroups = [];
+  const archDB = db.archetypesById || {};
+  const talentDB = db.talentsByClass || {};
   for (const c of classes) {
     const lvl = Number(c.level);
     const rows = c.def.levels.slice(0, lvl);
     const latestValue = {};
     for (const r of rows) for (const sp of r.special) latestValue[normFeat(sp)] = sp;
+    const archs = (c.archetypes || []).map((id) => archDB[id]).filter(Boolean);
+    c.archetypeNames = archs.map((a) => a.name);
+    const replaced = [];
+    const archFeats = [];
+    for (const a of archs) {
+      for (const f of a.features || []) {
+        if (f.level > lvl) continue;
+        for (const r of f.replaces || []) replaced.push({ key: normFeat(r), by: `${a.name}: ${f.name}` });
+        archFeats.push({ ...f, archetype: a.name, archetypeId: a.id });
+      }
+    }
+    const replacedBy = (name) => {
+      const n = normFeat(name);
+      const hit = replaced.find((r) => r.key && (n === r.key || (n.length > 3 && (r.key.startsWith(n) || n.startsWith(r.key)))));
+      return hit ? hit.by : '';
+    };
+    const feats = [];
     for (const f of c.def.features || []) {
       if (f.level > lvl) continue;
-      const key = `${c.def.id}:${f.name}`;
-      const ov = (d.classFeatures || {})[key] || {};
+      const by = archs.length ? replacedBy(f.name) : '';
+      if (by) { out.classFeatureList.push({ key: `${c.def.id}:${f.name}`, classId: c.def.id, className: c.def.name, name: f.name, kind: f.type, level: f.level, text: f.text, placement: 'hidden', replacedBy: by, note: '', value: '' }); continue; }
+      feats.push({ ...f, key: `${c.def.id}:${f.name}` });
+    }
+    for (const f of archFeats) feats.push({ ...f, key: `${f.archetypeId}:${f.name}` });
+    for (const f of feats) {
+      const ov = (d.classFeatures || {})[f.key] || {};
       const hiddenDefault = HIDDEN_FEATURES.test(f.name);
       const placement = ov.placement || (hiddenDefault ? 'hidden' : guessPlacement(f));
-      const latest = latestValue[normFeat(f.name)] || findLatest(latestValue, f.name);
+      const latest = f.archetype ? '' : (latestValue[normFeat(f.name)] || findLatest(latestValue, f.name));
       const value = latest ? (latest.match(/\(([^)]*)\)|\s([+-]?\d+d?\d*)$/) || [])[1] || (latest.match(/\s([+-]?\d+d?\d*)$/) || [])[1] : '';
-      const entry = { key, classId: c.def.id, className: c.def.name, name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText };
+      const entry = { key: f.key, classId: c.def.id, className: c.def.name, archetype: f.archetype || '', name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText };
       out.classFeatureList.push(entry);
       if (placement !== 'hidden') abilities.push({ name: f.name, kind: f.type, placement, short: `${f.name.toLowerCase()}${value ? ` (${value})` : ''}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
+    }
+    // talents: limit from the class table ("Knight Talent" at 2nd, 4th…), minus talents an archetype replaces
+    for (const g of talentDB[c.def.id] || []) {
+      const base = g.perLevel && g.perLevel.length ? g.perLevel[Math.min(lvl, g.perLevel.length) - 1] : null;
+      const lost = archFeats.filter((f) => (f.replaces || []).some((r) => normFeat(r).replace(/s$/, '') === g.key || normFeat(r).replace(/s$/, '') === g.key.replace(/s$/, ''))).length;
+      const allowed = base === null ? null : Math.max(0, base - lost);
+      const chosen = (d.talents || []).filter((t) => t.classId === c.def.id && t.group === g.group);
+      out.talentGroups.push({ classId: c.def.id, className: c.def.name, group: g.group, allowed, lost, chosen, items: g.items, alsoFrom: g.alsoFrom || [], source: g.source, advanced: g.advanced });
+      if (allowed !== null && chosen.length > allowed) out.warnings.push(`${g.group}: ${chosen.length} escolhidos, limite ${allowed} no nível ${lvl}.`);
+      const inGroupLine = [];
+      for (const t of chosen) {
+        const info = g.items.find((x) => x.name === t.name) || (db.talentsByClass?.[c.def.id] || []).flatMap((x) => x.items).find((x) => x.name === t.name) || {};
+        if (!t.placement || t.placement === 'group') inGroupLine.push(t.name + (t.note ? ` (${t.note})` : ''));
+        else abilities.push({ name: t.name, kind: info.type || '', placement: t.placement, short: t.name.toLowerCase() + (t.note ? ` (${t.note})` : ''), text: t.showText ? info.text || '' : '', origin: g.group });
+        if ((!t.placement || t.placement === 'group') && t.showText) abilities.push({ name: t.name, kind: info.type || '', placement: 'hidden', short: '', text: info.text || '', origin: g.group });
+      }
+      if (inGroupLine.length) abilities.push({ name: g.group, kind: '', placement: 'sq', short: `${g.group.toLowerCase()} [${inGroupLine.join(', ')}]`, text: '', origin: c.def.name, talentGroup: true });
     }
   }
   // limit breaks (NPC with limit breaks enabled, or class-built creatures if user enables)
@@ -615,9 +691,11 @@ function findLatest(latest, name) {
 }
 const ATTACK_RE = /(attack|strike|sneak|smite|lancer|jump|breath|bomb|blast|shot|slash|rage|challenge|lancet|fury|throw|stance of|flurry|kenki|blitz|leap|swoop|dive|cleave|charge|mark|technique|combo|bite)/i;
 const DEFENSE_RE = /(evasion|uncanny dodge|fortification|defens|stalwart|resist|immun|reduction|ac bonus|bulwark|shield|protect|armor training|block|parry|endurance|resilien|ward|indestructible|dodge|mettle|guard)/i;
+const ACTIVATED_RE = /\bas an? (standard|swift|move|full-round|immediate|free) action\b|\b\d+\/day\b|\btimes per day\b|\bonce per (day|round|encounter)\b/i;
 function guessPlacement(f) {
   if (DEFENSE_RE.test(f.name)) return 'defensive';
   if (ATTACK_RE.test(f.name)) return 'specialAttack';
+  if (ACTIVATED_RE.test((f.text || '').slice(0, 600))) return 'specialAbility';
   return 'sq';
 }
 function pluralize(n) {

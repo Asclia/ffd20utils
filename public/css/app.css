@@ -258,3 +258,24 @@ main { flex: 1; padding: 16px 18px; }
   .ed-preview { position: static; max-height: none; overflow: visible; }
   .sb-wrap { box-shadow: none; }
 }
+
+/* ---------- equipment & talents */
+.armor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.armor-card, .slot-card { background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.slot-card.filled { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+.slot-head { display: flex; align-items: center; justify-content: space-between; }
+.slot-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+.slot-empty { align-self: flex-start; }
+.item-box { display: flex; flex-direction: column; gap: 4px; }
+.item-box .w-name { width: 100%; flex: 1; }
+.effects-edit { border-top: 1px dashed var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.auto-note { color: var(--ok); }
+.talent-group { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; margin: 8px 0; background: var(--bg2); }
+.talent-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.talent-head .count { font-weight: 700; color: var(--accent2); border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; }
+.talent-head .count.full { color: var(--ok); }
+.talent-head .count.over { color: var(--danger); }
+.talent-row { border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent); padding: 4px 0; }
+.arch-row { margin-left: 12px; }
+.cf-row.replaced { opacity: .6; }

@@ -410,6 +410,226 @@ def parse_race(path, s, cat):
             'source': 'https://finalfantasyd20.com/' + path.replace('__', '/') + '/'}
 
 
+# --------------------------------------------------------------------------- talents
+SELECTION_EXCLUDE = ('archetypes', 'swordskills', 'deific-orders', 'avatars', 'animal-companions', 'domains')
+
+
+def singular(name):
+    n = re.sub(r'\s*\(.*?\)', '', name).strip().lower()
+    n = re.sub(r'^table:\s*', '', n)
+    words = n.split()
+    if words and words[-1].endswith('s') and not words[-1].endswith('ss'):
+        words[-1] = words[-1][:-1]
+    return ' '.join(words)
+
+
+def close(a, b):
+    import difflib
+    return a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.88
+
+
+def parse_talent_page(s):
+    """Returns [(group title, [items])] from a talent page's tables."""
+    body = page_content(s)
+    out = []
+    for m in re.finditer(r'<h2[^>]*tablepress-table-name[^>]*>(.*?)</h2>\s*(<table.*?</table>)', body, flags=re.S):
+        title = re.sub(r'^Table:\s*', '', one_line(m.group(1))).strip()
+        rows = tables(m.group(2))
+        if not rows or len(rows[0][0]) < 2:
+            continue
+        hdr = [h.lower() for h in rows[0][0]]
+        ip = next((i for i, h in enumerate(hdr) if 'prereq' in h), None)
+        ib = next((i for i, h in enumerate(hdr) if 'benefit' in h or 'description' in h or 'effect' in h), len(hdr) - 1)
+        items = []
+        for row in rows[0][1:]:
+            if not row or not row[0].strip():
+                continue
+            raw = re.sub(r'^[└\-\s]+', '', row[0]).strip()
+            mm = re.match(r'(.*?)\s*\((Ex|Su|Sp|Ex/Su|Su/Sp)\)\s*\*?$', raw)
+            name, kind = (mm.group(1), mm.group(2)) if mm else (raw.rstrip('*'), '')
+            items.append({'name': name.strip(), 'type': kind,
+                          'prereq': (row[ip].strip(' —-') if ip is not None and ip < len(row) else ''),
+                          'text': row[ib].strip() if ib < len(row) else ''})
+        if items:
+            out.append((title, items))
+    return out
+
+
+def build_talents(pages_dir, files, classes):
+    by_id = {c['id']: c for c in classes}
+    result = {}
+    for f in files:
+        parts = f[:-5].split('__')
+        if not (len(parts) == 4 and parts[0] == 'classes' and parts[3] not in SELECTION_EXCLUDE):
+            continue
+        cls = by_id.get(parts[2])
+        if not cls:
+            continue
+        with open(os.path.join(pages_dir, f), encoding='utf8') as fh:
+            groups = parse_talent_page(fh.read())
+        for title, items in groups:
+            key = singular(title)
+            per_level = []
+            count = 0
+            for lv in cls['levels']:
+                for sp in lv['special']:
+                    if close(singular(sp), key):
+                        count += 1
+                per_level.append(count)
+            if count == 0:
+                # pages like "Ruby Arcana" are chosen through a differently named feature; keep, no limit
+                per_level = []
+            result.setdefault(cls['id'], []).append({
+                'group': title, 'key': key, 'advanced': 'advanced' in key or key.startswith('master '),
+                'perLevel': per_level, 'items': items,
+                'source': 'https://finalfantasyd20.com/' + f[:-5].replace('__', '/') + '/'})
+    # advanced groups may also take a regular talent of the same class
+    for cid, groups in result.items():
+        for g in groups:
+            if g['advanced']:
+                base = [x['group'] for x in groups if not x['advanced']
+                        and close(x['key'], g['key'].replace('advanced ', '').replace('master trick', 'ninja trick'))]
+                g['alsoFrom'] = base
+    return result
+
+
+# --------------------------------------------------------------------------- archetypes
+REPLACE_RE = re.compile(r'(?:This (?:ability|feature|class feature)s? )?(replaces?|modif(?:y|ies)|alters?|changes?)\s+(?:the\s+)?(.+?)(?:\.|$)', re.I)
+
+
+def parse_archetype(path, s, cls):
+    title = one_line(re.search(r'<h1 class="page-title">(.*?)</h1>', s, re.S).group(1))
+    body = page_content(s)
+    intro = clean(body.split('<h', 1)[0]) if '<h' in body else ''
+    feats = []
+    for lvl, head, bod in sections(body):
+        if head.lower().startswith(('table', 'favored class')):
+            continue
+        m = re.match(r'(.*?)\s*\((Ex|Su|Sp|Ex/Su|Su/Sp)\)\s*$', head)
+        name, kind = (m.group(1), m.group(2)) if m else (head, '')
+        text = clean(bod)
+        replaces = []
+        for rm in re.finditer(r'(?:\bThis\b[^.]*?|^|\.\s+)\b(?:replaces?|in place of)\s+(?:the\s+)?([^.]+?)(?:\.|$)', text, re.I | re.M):
+            chunk = rm.group(1)
+            chunk = re.sub(r'\b(?:class feature|ability|abilities|features?)\b', '', chunk, flags=re.I)
+            for part in re.split(r',|\band\b|\bas well as\b', chunk):
+                part = re.sub(r"\b(?:the|a|an|his|her|their|\w+'s|gained at \d+\w* level.*|at \d+\w* level.*|from \d+\w* level.*)\b", ' ', part, flags=re.I)
+                part = re.sub(r'\s+', ' ', part).strip(' ,;:')
+                if 2 < len(part) < 50:
+                    replaces.append(part)
+        lv = re.search(r'\b(?:At|Beginning at|Starting at|By|at)\s+(\d+)(?:st|nd|rd|th) level', text)
+        feats.append({'name': name.strip(), 'type': kind, 'level': int(lv.group(1)) if lv else 1,
+                      'text': text, 'replaces': replaces})
+    return {'id': slug(cls + '-' + title), 'classId': cls, 'name': title, 'intro': intro[:600],
+            'features': feats, 'source': 'https://finalfantasyd20.com/' + path.replace('__', '/') + '/'}
+
+
+# --------------------------------------------------------------------------- items
+SLOT_MAP = {'belt': 'belt', 'body': 'body', 'chest': 'chest', 'eyes': 'eyes', 'eye': 'eyes', 'feet': 'feet',
+            'hands': 'hands', 'hand': 'hands', 'head': 'head', 'headband': 'headband', 'neck': 'neck',
+            'shoulders': 'shoulders', 'shoulder': 'shoulders', 'wrists': 'wrists', 'wrist': 'wrists',
+            'finger': 'ring', 'slotless': 'slotless', 'none': 'slotless'}
+
+
+def gil(v):
+    v = re.sub(r'[^\d.]', '', v or '')
+    try:
+        return int(float(v)) if v else 0
+    except ValueError:
+        return 0
+
+
+def parse_slot_tables(s, default_slot=None):
+    body = page_content(s)
+    out = []
+    for m in re.finditer(r'<h[23][^>]*>[^<]*?\((?:(\w+) Slot|(Slotless))\)[^<]*</h[23]>|(<table.*?</table>)', body, flags=re.S):
+        if m.group(1) or m.group(2):
+            k = (m.group(1) or m.group(2)).lower()
+            default_slot = SLOT_MAP.get(k, k)
+            continue
+        rows = tables(m.group(3))
+        if not rows or not rows[0] or 'Item' not in rows[0][0][0]:
+            continue
+        hdr = [h.lower() for h in rows[0][0]]
+        ip = next((i for i, h in enumerate(hdr) if 'price' in h or 'cost' in h), None)
+        for row in rows[0][1:]:
+            if len(row) < 2 or not row[0].strip():
+                continue
+            out.append({'name': re.sub(r'^[└\-\s]+', '', row[0]).strip(), 'slot': default_slot or 'slotless',
+                        'text': row[1].strip(), 'price': gil(row[ip]) if ip is not None and ip < len(row) else 0})
+    return out
+
+
+def parse_specials(s):
+    out = {}
+    for t in tables(page_content(s)):
+        if not t or not t[0] or 'Special Ability' not in t[0][0]:
+            continue
+        for row in t[1:]:
+            if len(row) < 2 or not row[0]:
+                continue
+            name = re.sub(r'[¹²³⁴⁵*]+$', '', row[0]).strip()
+            cost = row[1].strip()
+            text = row[3].strip() if len(row) > 3 else ''
+            out.setdefault(name.lower(), {'name': name, 'cost': cost, 'text': text})
+    return sorted(out.values(), key=lambda x: x['name'])
+
+
+def parse_weapons(s):
+    out = []
+    for t in tables(page_content(s)):
+        if not t or len(t[0]) < 5 or 'Dmg (M)' not in t[0]:
+            continue
+        hdr = t[0]
+        idx = {h: i for i, h in enumerate(hdr)}
+        for row in t[1:]:
+            if len(row) < len(hdr) - 1 or not row[0]:
+                continue
+            m = re.match(r'(.*?)\s*\(([^)]*)\)\s*$', row[0])
+            name, cat = (m.group(1), m.group(2)) if m else (row[0], '')
+            crit = row[idx['Critical']] if 'Critical' in idx else 'x2'
+            cr = re.search(r'(\d+)\s*-\s*20', crit)
+            cm = re.search(r'[x×](\d)', crit)
+            rng = next((row[i] for h, i in idx.items() if 'Range' in h), '')
+            out.append({'name': name.strip(), 'category': cat.lower(), 'dice': row[idx['Dmg (M)']],
+                        'critRange': int(cr.group(1)) if cr else 20, 'critMult': int(cm.group(1)) if cm else 2,
+                        'range': rng if rng not in ('—', '-') else '',
+                        'dtype': next((row[i] for h, i in idx.items() if 'Type' in h), ''),
+                        'price': gil(next((row[i] for h, i in idx.items() if 'Cost' in h or 'Price' in h), ''))})
+    return out
+
+
+def build_items(pages_dir, files):
+    def read(f):
+        with open(os.path.join(pages_dir, f), encoding='utf8') as fh:
+            return fh.read()
+    wondrous = []
+    if 'magical-items__wondrous-items.html' in files:
+        wondrous += parse_slot_tables(read('magical-items__wondrous-items.html'))
+    if 'magical-items__rings.html' in files:
+        wondrous += parse_slot_tables(read('magical-items__rings.html'), 'ring')
+    consumables = []
+    if 'magical-items__alchemical-items.html' in files:
+        for t in tables(page_content(read('magical-items__alchemical-items.html'))):
+            if t and t[0] and t[0][0].startswith('Item'):
+                for row in t[1:]:
+                    if len(row) >= 3 and row[0]:
+                        consumables.append({'name': row[0].strip(), 'text': row[1].strip(), 'price': gil(row[2])})
+    weapons = []
+    for f in files:
+        if f == 'equipment__weapons.html' or (f.startswith('equipment__weapons__') and 'test-page' not in f):
+            weapons += parse_weapons(read(f))
+    seen = set()
+    weapons = [w for w in weapons if not (w['name'].lower() in seen or seen.add(w['name'].lower()))]
+    return {
+        'wondrous': wondrous,
+        'consumables': consumables,
+        'weaponSpecials': parse_specials(read('magical-items__magical-weapons.html')) if 'magical-items__magical-weapons.html' in files else [],
+        'armorSpecials': parse_specials(read('magical-items__magical-armors.html')) if 'magical-items__magical-armors.html' in files else [],
+        'weapons': weapons,
+    }
+
+
 # --------------------------------------------------------------------------- main
 def main():
     if len(sys.argv) < 2:
@@ -497,6 +717,25 @@ def main():
     dump('feats.json', feat_list)
     dump('spells.json', spells)
     dump('races.json', races)
+
+    talents = build_talents(pages, files, classes)
+    print('talent groups', sum(len(v) for v in talents.values()), 'classes', len(talents))
+    dump('talents.json', talents)
+
+    archetypes = []
+    for f in files:
+        parts = f[:-5].split('__')
+        if len(parts) == 5 and parts[0] == 'classes' and parts[3] == 'archetypes':
+            try:
+                archetypes.append(parse_archetype(f[:-5], read(f), parts[2]))
+            except Exception as e:
+                print('archetype parse failed', f, e)
+    print('archetypes', len(archetypes))
+    dump('archetypes.json', archetypes)
+
+    items = build_items(pages, files)
+    print('items', {k: len(v) for k, v in items.items()})
+    dump('items.json', items)
 
 
 if __name__ == '__main__':

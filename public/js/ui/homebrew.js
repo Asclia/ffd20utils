@@ -7,7 +7,7 @@ import { babFor, goodSave, poorSave } from '../rules/tables.js';
 import { SKILLS } from '../rules/skills.js';
 
 const KINDS = [['Ex', 'Ex'], ['Su', 'Su'], ['Sp', 'Sp'], ['', '—']];
-const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição']];
+const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição']];
 const slug = (s) => 'hb-' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + uid().slice(0, 4);
 
 export function Homebrew({ app }) {

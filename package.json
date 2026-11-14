@@ -1,6 +1,6 @@
 {
   "name": "ffd20utils",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Criador de monstros e NPCs para Final Fantasy d20 (FFd20) com statblocks no formato Pathfinder 1e.",
   "type": "module",
   "private": true,

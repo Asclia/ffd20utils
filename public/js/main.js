@@ -18,11 +18,14 @@ const TABS = [
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [classes, feats, spells, races] = await Promise.all([get('classes.json'), get('feats.json'), get('spells.json'), get('races.json')]);
+  const [classes, feats, spells, races, talentsByClass, archetypes, items] = await Promise.all(
+    ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json'].map(get));
+  archetypes.sort((a, b) => a.name.localeCompare(b.name));
   classes.sort((a, b) => a.name.localeCompare(b.name));
   races.sort((a, b) => a.name.localeCompare(b.name));
   return {
-    classes, feats, spells, races,
+    classes, feats, spells, races, talentsByClass, archetypes, items,
+    archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
     classesById: Object.fromEntries(classes.map((c) => [c.id, c])),
     racesById: Object.fromEntries(races.map((r) => [r.id, r])),
   };
@@ -33,7 +36,9 @@ function normalize(e) {
   const base = newCreature(e.mode || 'monster');
   const out = { ...base, ...e };
   for (const k of ['speed', 'caster', 'tactics', 'abilities', 'abilityAdjust', 'abilityNone', 'image']) out[k] = { ...base[k], ...(e[k] || {}) };
-  for (const k of ['attacks', 'feats', 'armor', 'abilitiesList', 'modifiers', 'subtypes', 'classes', 'senses', 'immunities', 'burst']) if (!Array.isArray(out[k])) out[k] = [];
+  for (const k of ['attacks', 'feats', 'armor', 'abilitiesList', 'modifiers', 'subtypes', 'classes', 'senses', 'immunities', 'burst', 'talents']) if (!Array.isArray(out[k])) out[k] = [];
+  out.equipment = { ...base.equipment, ...(e.equipment || {}) };
+  out.equipment.slots = { ...(out.equipment.slots || {}) };
   return out;
 }
 

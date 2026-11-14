@@ -46,13 +46,14 @@ export function Chips({ items, onRemove, render = (x) => x }) {
 }
 
 // Searchable picker: shows a filtered list; pick() returns the chosen item.
-export function SearchPicker({ items, onPick, placeholder = 'Buscar…', renderItem, getText, limit = 60, filter, autoFocus }) {
+export function SearchPicker({ items, onPick, placeholder = 'Buscar…', renderItem, getText, limit = 60, filter, autoFocus, requireQuery, onCreate }) {
   const [q, setQ] = useState('');
   const ref = useRef();
   useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, []);
   const results = useMemo(() => {
     const n = q.trim().toLowerCase();
     let list = filter ? items.filter(filter) : items;
+    if (requireQuery && !n) return [];
     if (n) {
       const starts = [];
       const has = [];
@@ -68,11 +69,16 @@ export function SearchPicker({ items, onPick, placeholder = 'Buscar…', renderI
   }, [q, items, filter]);
   return html`<div class="picker">
     <input ref=${ref} type="search" placeholder=${placeholder} value=${q} onInput=${(e) => setQ(e.target.value)}
-      onKeyDown=${(e) => { if (e.key === 'Enter' && results[0]) { e.preventDefault(); onPick(results[0], q); setQ(''); } }} />
-    <div class="picker-list">
+      onKeyDown=${(e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (results[0]) onPick(results[0], q); else if (onCreate && q.trim()) onCreate(q.trim());
+        setQ('');
+      }} />
+    ${requireQuery && !q.trim() ? null : html`<div class="picker-list">
       ${results.map((it) => html`<div class="picker-item" onClick=${() => { onPick(it, q); setQ(''); }}>${renderItem ? renderItem(it) : getText(it)}</div>`)}
-      ${!results.length ? html`<div class="picker-empty">Nada encontrado.</div>` : null}
-    </div>
+      ${!results.length ? html`<div class="picker-empty">${onCreate ? 'Nada encontrado — Enter cria um item com esse nome.' : 'Nada encontrado.'}</div>` : null}
+    </div>`}
   </div>`;
 }
 

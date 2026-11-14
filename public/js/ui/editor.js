@@ -11,15 +11,17 @@ import { SKILLS, NPC_SKILL_SELECTIONS } from '../rules/skills.js';
 import { featEffect, featKey } from '../rules/featEffects.js';
 import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { exportMarkdown } from '../export.js';
+import { EquipmentSection } from './equipment.js';
+import { TalentsSection } from './talents.js';
 
-const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
+const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
 const KINDS = [['Ex', 'Ex'], ['Su', 'Su'], ['Sp', 'Sp'], ['', '—']];
 const CAT_PT = { core: 'Core', base: 'Base', hybrid: 'Híbridas', misc: 'Diversas', npc: 'Classes de NPC', prestige: 'Prestígio', homebrew: 'Homebrew' };
 
 export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirty, inLibrary }) {
   const { db, homebrew, folders } = app;
   const c = useMemo(() => compute(def, { ...db, homebrew }), [def, db, homebrew]);
-  const blocks = useMemo(() => buildStatblock(def, c), [def, c]);
+  const blocks = useMemo(() => buildStatblock(def, c, db), [def, c, db]);
   const sbHTML = useMemo(() => statblockHTML(blocks), [blocks]);
   const up = (patch) => setDef((d) => ({ ...d, ...patch }));
   const upIn = (key, patch) => setDef((d) => ({ ...d, [key]: { ...(d[key] || {}), ...patch } }));
@@ -47,9 +49,11 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
         <${IdentitySection} def=${def} up=${up} folders=${folders} app=${app} />
         ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} />`}
         <${ClassesSection} def=${def} up=${up} db=${db} c=${c} npc=${npc} homebrew=${homebrew} />
+        <${TalentsSection} def=${def} up=${up} c=${c} />
         <${AbilitiesSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
         <${DefenseSection} def=${def} up=${up} upIn=${upIn} c=${c} />
         <${OffenseSection} def=${def} up=${up} upIn=${upIn} c=${c} />
+        <${EquipmentSection} def=${def} up=${up} c=${c} db=${db} />
         <${FeatsSection} def=${def} up=${up} c=${c} db=${db} homebrew=${homebrew} />
         <${SkillsSection} def=${def} up=${up} c=${c} npc=${npc} />
         <${MagicSection} def=${def} up=${up} upIn=${upIn} c=${c} db=${db} npc=${npc} />
@@ -192,10 +196,25 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
       empty=${npc ? 'Adicione ao menos uma classe.' : 'Monstros normalmente não têm classes; adicione se quiser um monstro com níveis de classe.'}
       render=${(it, set) => {
         const cd = allClasses.find((x) => x.id === it.classId);
-        return html`<div class="row wrap">
+        const archList = db.archetypes.filter((a) => a.classId === it.classId);
+        const chosenArch = (it.archetypes || []).map((id) => db.archetypesById[id]).filter(Boolean);
+        const overlaps = archOverlap(chosenArch);
+        return html`<div><div class="row wrap">
           <${Select} value=${it.classId} onChange=${(v) => set({ classId: v })} options=${opts} />
           <label class="inline">Nível <${Num} value=${it.level} min=${1} max=${cd?.maxLevel || 20} onInput=${(v) => set({ level: Math.max(1, Math.min(cd?.maxLevel || 20, v || 1)) })} /></label>
           ${cd ? html`<span class="muted small">d${cd.hd} · BAB ${cd.babProgression} · ${cd.skillPoints}+Int · ${cd.kind === 'basic' ? 'NPC (básica)' : 'heroica'}${cd.caster ? ` · conjurador (${(cd.castingAbility || '?').toUpperCase()})` : ''} ${cd.source ? html`· <a href=${cd.source} target="_blank" rel="noopener">página ↗</a>` : null}</span>` : null}
+        </div>
+        ${archList.length ? html`<div class="row wrap arch-row">
+          <span class="small muted">Arquétipos:</span>
+          <${Chips} items=${chosenArch} render=${(a) => a.name} onRemove=${(a) => set({ archetypes: (it.archetypes || []).filter((x) => x !== a.id) })} />
+          <${Select} value="" onChange=${(v) => v && set({ archetypes: [...new Set([...(it.archetypes || []), v])] })}
+            options=${[{ value: '', label: `+ arquétipo (${archList.length})…` }, ...archList.filter((a) => !(it.archetypes || []).includes(a.id)).map((a) => ({ value: a.id, label: a.name }))]} />
+        </div>
+        ${chosenArch.map((a) => html`<details class="traits"><summary>${a.name}: ${a.features.length} característica(s) — <a href=${a.source} target="_blank" rel="noopener">página ↗</a></summary>
+          ${a.intro ? html`<p><i>${a.intro}</i></p>` : null}
+          ${a.features.map((f) => html`<p><b>${f.name}</b>${f.type ? ` (${f.type})` : ''} <small>nv ${f.level}${f.replaces.length ? ` · substitui: ${f.replaces.join(', ')}` : ''}</small></p>`)}
+        </details>`)}
+        ${overlaps.length ? html`<div class="small warn">Arquétipos incompatíveis: ambos substituem ${overlaps.join(', ')}.</div>` : null}` : null}
         </div>`;
       }} />
     <div class="grid">
@@ -276,9 +295,10 @@ function DefenseSection({ def, up, upIn, c }) {
       <${Field} label="Defensive Abilities (texto)"><${Text} value=${def.defensiveText} placeholder="ferocity, light fortification" onInput=${(v) => up({ defensiveText: v })} /></${Field}>
       <${Field} label="Outras fraquezas"><${Text} value=${def.weaknessesText} placeholder="light sensitivity" onInput=${(v) => up({ weaknessesText: v })} /></${Field}>
     </div>
-    <h4>Armadura, escudo e outros bônus de CA</h4>
-    <${ListEditor} items=${def.armor} onChange=${(v) => up({ armor: v })} addLabel="+ Item de CA"
-      onAdd=${() => up({ armor: [...def.armor, { id: uid(), name: 'chain shirt', kind: 'armor', bonus: 4, maxDex: 4, acp: 2 }] })}
+    <h4>Outros bônus de CA</h4>
+    <div class="muted small">Armadura, escudo e itens mágicos ficam na seção <b>Equipamento e itens mágicos</b>; use esta lista para bônus avulsos (magias, características de classe…).</div>
+    <${ListEditor} items=${def.armor} onChange=${(v) => up({ armor: v })} addLabel="+ Bônus de CA"
+      onAdd=${() => up({ armor: [...def.armor, { id: uid(), name: 'Protect', kind: 'deflection', bonus: 2, maxDex: '', acp: 0 }] })}
       render=${(it, set) => html`<div class="row wrap">
         <input type="text" value=${it.name} onInput=${(e) => set({ name: e.target.value })} placeholder="nome" />
         <${Select} value=${it.kind} onChange=${(v) => set({ kind: v })} options=${[['armor', 'armadura'], ['shield', 'escudo'], ['deflection', 'deflexão'], ['dodge', 'esquiva'], ['insight', 'intuição'], ['luck', 'sorte'], ['sacred', 'sagrado'], ['profane', 'profano'], ['natural', 'natural (aprimoramento)'], ['untyped', 'sem tipo']]} />
@@ -558,9 +578,10 @@ function AbilitiesListSection({ def, up, c, homebrew }) {
     ${c.classFeatureList.length ? html`<h4>Características de classe (automáticas)</h4>
       <div class="muted small">Escolha onde cada característica aparece no statblock, adicione notas (ex.: talentos escolhidos) ou mostre a descrição completa.</div>
       ${Object.entries(byClass).map(([cls, list]) => html`<details class="cf-group" open><summary>${cls} (${list.length})</summary>
-        ${list.map((f) => html`<div class="cf-row">
+        ${list.filter((f) => f.replacedBy).map((f) => html`<div class="cf-row replaced"><s>${f.name}</s> <small class="muted">nv ${f.level} — substituída por ${f.replacedBy}</small></div>`)}
+        ${list.filter((f) => !f.replacedBy).map((f) => html`<div class="cf-row">
           <div class="row wrap">
-            <span class="cf-name"><b>${f.name}</b>${f.kind ? ` (${f.kind})` : ''} <small class="muted">nv ${f.level}${f.value ? ` · ${f.value}` : ''}</small></span>
+            <span class="cf-name"><b>${f.name}</b>${f.kind ? ` (${f.kind})` : ''} <small class="muted">nv ${f.level}${f.value ? ` · ${f.value}` : ''}${f.archetype ? ` · ${f.archetype}` : ''}</small></span>
             <${Select} value=${f.placement} onChange=${(v) => setFeature(f.key, { placement: v })} options=${PLACEMENTS} />
             <input type="text" class="w-note" placeholder="nota / escolhas" value=${f.note} onInput=${(e) => setFeature(f.key, { note: e.target.value })} />
             <${Check} label="descrição" checked=${f.showText} onChange=${(v) => setFeature(f.key, { showText: v })} />
@@ -625,8 +646,8 @@ function ExtrasSection({ def, up, upIn, c, npc }) {
       <${Field} label="Idiomas"><${Text} value=${def.languages} onInput=${(v) => up({ languages: v })} /></${Field}>
       <${Field} label="SQ (texto extra)"><${Text} value=${def.sqText} onInput=${(v) => up({ sqText: v })} /></${Field}>
       <${Field} label="Modificadores raciais de perícia"><${Text} value=${def.racialSkillMods} placeholder="+4 Stealth" onInput=${(v) => up({ racialSkillMods: v })} /></${Field}>
-      <${Field} label="Combat Gear"><${Text} value=${def.combatGear} placeholder="potion, ether" onInput=${(v) => up({ combatGear: v })} /></${Field}>
-      <${Field} label="Other Gear"><${Text} value=${def.gear} placeholder="+1 chainmail, 50 gil" onInput=${(v) => up({ gear: v })} /></${Field}>
+      <${Field} label="Combat Gear (texto extra)" hint="Somado aos consumíveis da seção Equipamento"><${Text} value=${def.combatGear} placeholder="prism powder" onInput=${(v) => up({ combatGear: v })} /></${Field}>
+      <${Field} label="Other Gear (texto extra)" hint="Somado aos itens da seção Equipamento"><${Text} value=${def.gear} placeholder="backpack, bedroll" onInput=${(v) => up({ gear: v })} /></${Field}>
       <${Field} label="Antes do combate" wide><${TextArea} rows=${2} value=${def.tactics.before} onInput=${(v) => upIn('tactics', { before: v })} /></${Field}>
       <${Field} label="Durante o combate" wide><${TextArea} rows=${2} value=${def.tactics.during} onInput=${(v) => upIn('tactics', { during: v })} /></${Field}>
       <${Field} label="Moral" wide><${TextArea} rows=${1} value=${def.tactics.morale} onInput=${(v) => upIn('tactics', { morale: v })} /></${Field}>
@@ -670,4 +691,15 @@ function NpcWealth({ def, c }) {
     </tbody></table>` : html`<p class="muted">Fora da tabela.</p>`}
     <div class="muted small">Gaste cada categoria no menor número de itens possível; sobras viram moedas/joias. XP rápido: +1 nível; lento: −1.</div>
   </div>`;
+}
+
+function archOverlap(archs) {
+  const seen = {};
+  const out = new Set();
+  for (const a of archs) for (const f of a.features) for (const r of f.replaces) {
+    const k = r.toLowerCase();
+    if (seen[k] && seen[k] !== a.id) out.add(r);
+    seen[k] = a.id;
+  }
+  return [...out];
 }

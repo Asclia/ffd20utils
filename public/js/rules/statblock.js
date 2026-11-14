@@ -1,12 +1,13 @@
 // Builds a Pathfinder 1e–style stat block (with FFd20 additions) from a computed creature,
 // as a neutral list of blocks, then renders it to HTML or Markdown.
 import { sign, crLabel, ordinal, ABILITIES, ABILITY_NAMES, CASTER_ABBR } from './tables.js';
+import { gearSummary } from './equipment.js';
 
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const joinNonEmpty = (arr, sep = ', ') => arr.filter((x) => x !== null && x !== undefined && String(x).trim() !== '').join(sep);
 const fmtNum = (n) => Number(n).toLocaleString('en-US');
 
-export function buildStatblock(d, c) {
+export function buildStatblock(d, c, db) {
   const B = [];
   const line = (label, text) => { if (text !== null && text !== undefined && String(text).trim() !== '') B.push({ t: 'line', label, text: String(text) }); };
   const section = (title) => B.push({ t: 'section', title });
@@ -17,7 +18,7 @@ export function buildStatblock(d, c) {
   if (d.flavor) B.push({ t: 'flavor', text: d.flavor });
   if (c.xp) B.push({ t: 'plain', text: `XP ${fmtNum(c.xp)}` });
   const raceName = c.race ? c.race.name : '';
-  const classPart = c.classes.map((x) => `${x.def.name.toLowerCase()} ${x.level}`).join('/');
+  const classPart = c.classes.map((x) => `${x.def.name.toLowerCase()}${x.archetypeNames?.length ? ` (${x.archetypeNames.map((n) => n.toLowerCase()).join(', ')})` : ''} ${x.level}`).join('/');
   if (classPart) B.push({ t: 'plain', text: joinNonEmpty([raceName, classPart], ' ') });
   const subtypes = c.subtypes.map((s) => (s.name || s.id).toLowerCase());
   if (c.boss !== 'none') subtypes.push({ mini: 'mini-boss', boss: 'boss', super: 'super boss' }[c.boss]);
@@ -66,6 +67,9 @@ export function buildStatblock(d, c) {
   if (d.statusInflicts) sa.push(d.statusInflicts);
   if (c.burst.length) sa.push(...c.burst.map((b) => `${(b.name || 'burst mode').toLowerCase()}`));
   line('Special Attacks', sa.join(', '));
+  // FFd20 NPC stat blocks: activated abilities get their own line under Special Attacks
+  const sab = c.specialAbilities.filter((a) => a.placement === 'specialAbility').map((a) => a.short || a.name.toLowerCase());
+  line('Special Abilities', sab.join(', '));
   // spell-like abilities
   const sla = (d.caster?.sla || []).filter((x) => x.name);
   if (sla.length) {
@@ -115,11 +119,12 @@ export function buildStatblock(d, c) {
   const sq = c.specialAbilities.filter((a) => a.placement === 'sq').map((a) => a.short || a.name.toLowerCase());
   if (d.sqText) sq.push(d.sqText);
   line('SQ', sq.join(', '));
-  line('Combat Gear', d.combatGear);
-  line('Other Gear', d.gear);
+  const gs = gearSummary(d, db);
+  line('Combat Gear', [...gs.combat, d.combatGear].filter(Boolean).join(', '));
+  line('Other Gear', [...gs.other, d.gear].filter(Boolean).join(', '));
 
   // ---------------- special abilities
-  const detailed = c.specialAbilities.filter((a) => a.text && a.placement !== 'hidden');
+  const detailed = c.specialAbilities.filter((a) => a.text);
   if (detailed.length || c.burst.length || c.limitBreaks.length) {
     section('Special Abilities');
     for (const b of c.burst) B.push({ t: 'ability', name: b.name || 'Burst Mode', kind: b.kind || 'Su', text: `${b.text || ''}${b.text ? ' ' : ''}(Swift action at 50% HP or less; ${b.uses}/day; lasts ${b.duration}.)` });

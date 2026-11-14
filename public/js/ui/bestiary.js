@@ -82,7 +82,7 @@ function Card({ e, c, onClick }) {
 
 export function Viewer({ app, entry, c, onClose, onOpen }) {
   const comp = c || compute(entry, { ...app.db, homebrew: app.homebrew });
-  const sb = statblockHTML(buildStatblock(entry, comp));
+  const sb = statblockHTML(buildStatblock(entry, comp, app.db));
   const del = async () => {
     if (!confirm(`Excluir "${entry.name}" da biblioteca? Isso não pode ser desfeito.`)) return;
     await app.deleteEntry(entry.id);
