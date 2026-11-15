@@ -1,7 +1,8 @@
 import { html, useState } from '../../vendor/ui.mjs';
 import { Field, Text, TextArea, Num, Select, Check, Chips, ListEditor, toast } from './components.js';
 import { uid } from '../rules/engine.js';
-import { ELEMENTS, ELEMENT_PT, AFFINITIES, ALL_IMMUNITIES, SENSES_COMMON } from '../rules/types.js';
+import { ELEMENTS, ELEMENT_PT, AFFINITIES, ALL_IMMUNITIES, SENSES_COMMON, TYPES } from '../rules/types.js';
+import { SIZES, SIZE_PT, ABILITIES, ABILITY_LONG } from '../rules/tables.js';
 import { MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { babFor, goodSave, poorSave } from '../rules/tables.js';
 import { SKILLS } from '../rules/skills.js';
@@ -11,12 +12,13 @@ const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Sp
 const slug = (s) => 'hb-' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + uid().slice(0, 4);
 
 export function Homebrew({ app }) {
-  const [tab, setTab] = useState('subtypes');
+  const [tab, setTab] = useState('races');
   const hb = app.homebrew;
   const setList = (key, list) => app.setHomebrew({ ...hb, [key]: list });
   return html`<div class="homebrew">
-    <div class="seg">${[['subtypes', 'Subtipos'], ['feats', 'Feats'], ['abilities', 'Habilidades'], ['classes', 'Classes']].map(([k, l]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${l} <small>${(hb[k] || []).length}</small></button>`)}</div>
+    <div class="seg">${[['races', 'Raças'], ['subtypes', 'Subtipos'], ['feats', 'Feats'], ['abilities', 'Habilidades'], ['classes', 'Classes']].map(([k, l]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${l} <small>${(hb[k] || []).length}</small></button>`)}</div>
     <p class="muted small">Conteúdo próprio fica disponível nos editores de Monstro e NPC, é salvo junto da biblioteca e incluído nos backups JSON.</p>
+    ${tab === 'races' ? html`<${RacesEditor} list=${hb.races || []} setList=${(l) => setList('races', l)} />` : null}
     ${tab === 'subtypes' ? html`<${SubtypesEditor} list=${hb.subtypes || []} setList=${(l) => setList('subtypes', l)} />` : null}
     ${tab === 'feats' ? html`<${FeatsEditor} list=${hb.feats || []} setList=${(l) => setList('feats', l)} />` : null}
     ${tab === 'abilities' ? html`<${AbilitiesEditor} list=${hb.abilities || []} setList=${(l) => setList('abilities', l)} />` : null}
@@ -36,7 +38,7 @@ function MasterDetail({ list, setList, make, label, renderDetail }) {
   const cur = list.find((x) => x.id === sel);
   return html`<div class="master-detail">
     <div class="md-list">
-      <button class="btn small" onClick=${() => { const n = make(); setList([...list, n]); setSel(n.id); }}>+ Novo ${label}</button>
+      <button class="btn small" onClick=${() => { const n = make(); setList([...list, n]); setSel(n.id); }}>+ Criar ${label}</button>
       ${list.map((x) => html`<div class="md-row ${x.id === sel ? 'sel' : ''}" onClick=${() => setSel(x.id)}>${x.name}</div>`)}
     </div>
     <div class="md-detail">${cur ? html`<div key=${cur.id}>
@@ -168,4 +170,52 @@ function ClassesEditor({ list, setList, db }) {
       <h4>Limit Breaks</h4>
       <${ListEditor} items=${d.limitBreaks || []} onChange=${(v) => set({ limitBreaks: v })} addLabel="+ Limit Break" onAdd=${() => set({ limitBreaks: [...(d.limitBreaks || []), { name: 'Novo Limit Break', type: 'Su', text: '' }] })}
         render=${(l, setL) => html`<div class="ability-row"><input type="text" value=${l.name} onInput=${(e) => setL({ name: e.target.value })} /><textarea rows="2" value=${l.text} onInput=${(e) => setL({ text: e.target.value })}></textarea></div>`} />`} />`;
+}
+
+// Shared: element affinity grid, immunity and sense chips (used by races and subtypes)
+function TraitsBlock({ d, set }) {
+  return html`
+    <h4>Afinidades elementais</h4>
+    <div class="elements">${ELEMENTS.map((el) => html`<div class="el-row el-${el}"><span class="el-name">${ELEMENT_PT[el]}</span>
+      <${Select} value=${d.elements?.[el] || ''} onChange=${(v) => set({ elements: { ...d.elements, [el]: v } })} options=${Object.entries(AFFINITIES)} />
+      ${d.elements?.[el] === 'resist' ? html`<${Num} value=${d.resist?.[el] ?? 10} onInput=${(v) => set({ resist: { ...d.resist, [el]: v } })} />` : null}</div>`)}</div>
+    <h4>Imunidades</h4>
+    <${Chips} items=${d.immunities || []} onRemove=${(x) => set({ immunities: d.immunities.filter((y) => y !== x) })} />
+    <${Select} value="" onChange=${(v) => v && set({ immunities: [...new Set([...(d.immunities || []), v])] })} options=${[['', '+ imunidade…'], ...ALL_IMMUNITIES.map((x) => [x, x])]} />
+    <h4>Sentidos</h4>
+    <${Chips} items=${d.senses || []} onRemove=${(x) => set({ senses: d.senses.filter((y) => y !== x) })} />
+    <${Select} value="" onChange=${(v) => v && set({ senses: [...new Set([...(d.senses || []), v])] })} options=${[['', '+ sentido…'], ...SENSES_COMMON.map((x) => [x, x])]} />`;
+}
+
+function RacesEditor({ list, setList }) {
+  return html`<${MasterDetail} list=${list} setList=${setList} label="raça"
+    make=${() => ({ id: slug('raca'), homebrew: true, name: 'Nova raça', category: 'homebrew', size: 'Medium', type: 'humanoid', subtypes: [], speed: 30,
+      abilityMods: {}, flexibleBonus: false, bonusFeat: false, bonusSkillRanks: false, languages: 'Common', elements: {}, resist: {}, immunities: [], senses: [], traits: [], abilities: [], mods: [] })}
+    renderDetail=${(d, set) => html`
+      <div class="grid">
+        <${Field} label="Nome"><${Text} value=${d.name} onInput=${(v) => set({ name: v })} /></${Field}>
+        <${Field} label="Tamanho"><${Select} value=${d.size} onChange=${(v) => set({ size: v })} options=${SIZES.map((x) => [x, SIZE_PT[x]])} /></${Field}>
+        <${Field} label="Tipo"><${Select} value=${d.type} onChange=${(v) => set({ type: v })} options=${TYPES.map((t) => [t.id, t.name])} /></${Field}>
+        <${Field} label="Subtipos (vírgulas)" hint="Ex.: viera, aquatic"><${Text} value=${(d.subtypes || []).join(', ')} onInput=${(v) => set({ subtypes: v.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean) })} /></${Field}>
+        <${Field} label="Deslocamento (ft.)"><${Num} value=${d.speed} step=${5} onInput=${(v) => set({ speed: v })} /></${Field}>
+        <${Field} label="Idiomas"><${Text} value=${d.languages} onInput=${(v) => set({ languages: v })} /></${Field}>
+      </div>
+      <h4>Modificadores de atributo</h4>
+      <div class="row wrap">${ABILITIES.map((a) => html`<label class="inline">${ABILITY_LONG[a]} <${Num} value=${d.abilityMods?.[a] || 0}
+        onInput=${(v) => { const m = { ...(d.abilityMods || {}) }; if (v) m[a] = v; else delete m[a]; set({ abilityMods: m }); }} /></label>`)}</div>
+      <div class="row wrap">
+        <${Check} label="+2 em um atributo à escolha (como Hume)" checked=${d.flexibleBonus} onChange=${(v) => set({ flexibleBonus: v })} />
+        <${Check} label="Feat bônus no 1º nível" checked=${d.bonusFeat} onChange=${(v) => set({ bonusFeat: v })} />
+        <${Check} label="+1 graduação de perícia por nível" checked=${d.bonusSkillRanks} onChange=${(v) => set({ bonusSkillRanks: v })} />
+      </div>
+      <h4>Traços raciais (texto)</h4>
+      <div class="muted small">Aparecem no editor de NPC, onde cada um pode ser enviado ao SQ com um clique.</div>
+      <${ListEditor} items=${d.traits || []} onChange=${(v) => set({ traits: v })} addLabel="+ Traço" onAdd=${() => set({ traits: [...(d.traits || []), { id: uid(), name: 'Novo traço', text: '' }] })}
+        render=${(t, setT) => html`<div class="ability-row"><input type="text" value=${t.name} onInput=${(e) => setT({ name: e.target.value })} />
+          <textarea rows="2" value=${t.text} onInput=${(e) => setT({ text: e.target.value })}></textarea></div>`} />
+      <h4>Habilidades raciais automáticas no statblock</h4>
+      <${AbilityRows} list=${d.abilities} onChange=${(v) => set({ abilities: v })} />
+      <${TraitsBlock} d=${d} set=${set} />
+      <h4>Modificadores (ex.: +2 racial em Perception, armadura natural)</h4>
+      <${ModsList} mods=${d.mods} onChange=${(v) => set({ mods: v })} />`} />`;
 }

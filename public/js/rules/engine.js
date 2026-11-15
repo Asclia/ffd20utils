@@ -84,7 +84,7 @@ export function compute(def, db) {
   const hb = db.homebrew || {};
   const out = { warnings: [], notes: [] };
   const npc = d.mode === 'npc';
-  const race = npc && d.raceId ? (db.racesById || {})[d.raceId] : null;
+  const race = npc && d.raceId ? ((db.racesById || {})[d.raceId] || (hb.races || []).find((r) => r.id === d.raceId) || null) : null;
   out.race = race;
 
   // ---- type & subtypes
@@ -93,6 +93,8 @@ export function compute(def, db) {
   const subtypeDefs = (d.subtypes || []).map((sid) => SUBTYPE_BY_ID[sid] || (hb.subtypes || []).find((s) => s.id === sid) || { id: sid, name: sid, custom: true });
   if (race) for (const rs of race.subtypes || []) if (!d.subtypes.includes(rs) && !subtypeDefs.find((x) => x.id === rs)) subtypeDefs.unshift(SUBTYPE_BY_ID[rs] || { id: rs, name: rs });
   out.subtypes = subtypeDefs;
+  // homebrew races carry subtype-like traits (elements, immunities, senses, modifiers, abilities)
+  const traitSources = race && race.homebrew ? [...subtypeDefs, { ...race, name: race.name }] : subtypeDefs;
   const flags = { ...(type.flags || {}) };
   for (const s of subtypeDefs) Object.assign(flags, s.flags || {});
   const boss = d.boss || 'none';
@@ -107,7 +109,7 @@ export function compute(def, db) {
   const mods = [];
   const addMod = (m) => mods.push(m);
   for (const m of d.modifiers || []) if (m.enabled !== false && m.target) addMod({ ...m, value: Number(m.value) || 0, source: m.note || 'custom' });
-  for (const s of subtypeDefs) for (const m of s.mods || []) addMod({ ...m, source: s.name });
+  for (const s of traitSources) for (const m of s.mods || []) addMod({ ...m, value: Number(m.value) || 0, source: s.name });
   // ---- equipment (body slots + slotless): modifiers, immunities, granted feats, weapon riders
   const eq = d.equipment || emptyEquipment();
   const wornItems = [...SLOTS.map(([k]) => eq.slots?.[k]), ...(eq.slots ? [] : []), ...(eq.slotless || [])].filter((x) => x && x.name && x.active !== false);
@@ -464,7 +466,7 @@ export function compute(def, db) {
     available: racialHD * Math.max(1, (flags.skillPts || type.skillPts || 2) + m.int) +
       classes.reduce((s, c) => s + Number(c.level) * Math.max(1, (c.def.skillPoints || 2) + m.int), 0) +
       (d.favored === 'skill' && classes[0] ? Number(classes[0].level) : 0) +
-      (race && race.id === 'hume' ? hd : 0),
+      (race && (race.id === 'hume' || race.bonusSkillRanks) ? hd : 0),
     used: Object.values(d.skills || {}).reduce((s, v) => s + (Number(v) || 0), 0),
     maxRanks: hd,
   };
@@ -492,13 +494,13 @@ export function compute(def, db) {
   out.perception = perception ? perception.total : m.wis;
 
   // ---- feats budget
-  out.featBudget = 1 + Math.floor(Math.max(0, hd - 1) / 2) + (race && ['hume', 'half-breed'].includes(race.id) ? 1 : 0);
+  out.featBudget = 1 + Math.floor(Math.max(0, hd - 1) / 2) + (race && (['hume', 'half-breed'].includes(race.id) || race.bonusFeat) ? 1 : 0);
   out.featsTaken = (d.feats || []).filter((f) => !f.bonus).length;
 
   // ---- senses
   const senses = new Set();
   for (const s of type.senses || []) senses.add(s);
-  for (const st of subtypeDefs) for (const s of st.senses || []) senses.add(s);
+  for (const st of traitSources) for (const s of st.senses || []) senses.add(s);
   if (race) for (const t of race.traits || []) {
     const n = t.name.toLowerCase();
     if (n.startsWith('low-light vision')) senses.add('low-light vision');
@@ -525,7 +527,7 @@ export function compute(def, db) {
     if (AFFINITY_RANK[val] > AFFINITY_RANK[cur] || cur === '') elements[src] = val;
   };
   for (const [el, v] of Object.entries(type.elements || {})) apply(el, v);
-  for (const st of subtypeDefs) {
+  for (const st of traitSources) {
     for (const [el, v] of Object.entries(st.elements || {})) apply(el, v);
     for (const [el, v] of Object.entries(st.resist || {})) resistAmt[el] = Math.max(resistAmt[el] || 0, v);
   }
@@ -548,7 +550,7 @@ export function compute(def, db) {
   // ---- immunities
   const imm = new Set();
   for (const x of type.immunities || []) imm.add(x);
-  for (const st of subtypeDefs) for (const x of st.immunities || []) imm.add(x);
+  for (const st of traitSources) for (const x of st.immunities || []) imm.add(x);
   if (isBossTier) for (const x of BOSS_IMMUNITIES) if (!(boss === 'super' && x === 'stun')) imm.add(x);
   for (const it of wornItems) for (const x of it.immunities || []) imm.add(x);
   for (const x of d.immunities || []) imm.add(x);
@@ -558,7 +560,7 @@ export function compute(def, db) {
 
   // ---- DR / SR
   const drParts = [];
-  for (const st of subtypeDefs) if (st.dr) drParts.push(st.dr);
+  for (const st of traitSources) if (st.dr) drParts.push(st.dr);
   const drFeat = resolveMods(mods.filter((x) => x.target === 'dr'));
   if (drFeat) drParts.push(`${drFeat}/—`);
   if (d.dr) drParts.unshift(d.dr);
@@ -587,7 +589,7 @@ export function compute(def, db) {
 
   // ---- special abilities (custom + subtype + class features + limit breaks + burst)
   const abilities = [];
-  for (const st of subtypeDefs) for (const ab of st.abilities || []) abilities.push({ ...ab, origin: st.name });
+  for (const st of traitSources) for (const ab of st.abilities || []) abilities.push({ ...ab, origin: st.name });
   for (const ab of d.abilitiesList || []) abilities.push({ ...ab, origin: 'custom' });
   // class features (+ archetype swaps) and class talents
   out.classFeatureList = [];

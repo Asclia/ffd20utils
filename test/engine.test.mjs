@@ -217,4 +217,22 @@ t('Special Abilities line sits under Special Attacks', () => {
   const j = md.indexOf('**Special Abilities** targeting shot');
   assert.ok(i > 0 && j > i, 'order');
 });
+t('Homebrew race: ability mods, size, senses, elements, modifiers, bonus feat', () => {
+  const race = { id: 'hb-lunar', homebrew: true, name: 'Lunarian', size: 'Small', type: 'humanoid', subtypes: ['lunarian'], speed: 25,
+    abilityMods: { dex: 2, wis: 2, str: -2 }, bonusFeat: true, senses: ['darkvision 60 ft.'], elements: { holy: 'strong', shadow: 'weak' },
+    immunities: ['sleep'], mods: [{ id: 'm', target: 'skill:Perception', value: 2, type: 'racial' }],
+    abilities: [{ id: 'a', name: 'Moonlit Step', kind: 'Su', placement: 'specialAbility', short: 'moonlit step', text: '' }] };
+  const d = newCreature('npc');
+  d.raceId = 'hb-lunar'; d.size = 'Small';
+  d.abilities = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const c = compute(d, { ...db, homebrew: { races: [race] } });
+  assert.equal(c.abilities.dex, 12); assert.equal(c.abilities.str, 8);
+  assert.ok(c.senses.includes('darkvision 60 ft.'));
+  assert.deepEqual(c.strong, ['holy']); assert.deepEqual(c.weak, ['shadow']);
+  assert.ok(c.immunities.includes('sleep'));
+  assert.equal(c.skills.find((x) => x.name === 'Perception').total, 3); // Wis 12 (+1) + 2 racial
+  assert.equal(c.featBudget, 2);
+  assert.ok(c.subtypes.some((x) => x.id === 'lunarian'));
+  assert.ok(c.specialAbilities.some((x) => x.name === 'Moonlit Step' && x.placement === 'specialAbility'));
+});
 console.log(`${passed} tests passed`);

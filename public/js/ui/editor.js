@@ -47,7 +47,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
     <div class="ed-columns">
       <div class="ed-form">
         <${IdentitySection} def=${def} up=${up} folders=${folders} app=${app} />
-        ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} />`}
+        ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} homebrew=${homebrew} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} />`}
         <${ClassesSection} def=${def} up=${up} db=${db} c=${c} npc=${npc} homebrew=${homebrew} />
         <${TalentsSection} def=${def} up=${up} c=${c} />
         <${AbilitiesSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
@@ -162,14 +162,19 @@ function MonsterTypeSection({ def, up, c, homebrew }) {
 }
 
 // ------------------------------------------------------------------ NPC race
-function NpcRaceSection({ def, up, db, c }) {
-  const race = db.racesById[def.raceId];
-  const opts = [{ value: '', label: '(sem raça / personalizado)' }, ...db.races.map((r) => ({ value: r.id, label: r.name, group: { 'core-races': 'Core', 'base-races': 'Base', 'beastman-tribes': 'Beastman', 'monstrous-races': 'Monstrous' }[r.category] || r.category }))];
+function NpcRaceSection({ def, up, db, c, homebrew }) {
+  const hbRaces = homebrew.races || [];
+  const findRace = (id) => db.racesById[id] || hbRaces.find((r) => r.id === id);
+  const race = findRace(def.raceId);
+  const opts = [{ value: '', label: '(sem raça / personalizado)' },
+    ...hbRaces.map((r) => ({ value: r.id, label: r.name, group: 'Homebrew' })),
+    ...db.races.map((r) => ({ value: r.id, label: r.name, group: { 'core-races': 'Core', 'base-races': 'Base', 'beastman-tribes': 'Beastman', 'monstrous-races': 'Monstrous' }[r.category] || r.category }))];
   const pickRace = (id) => {
-    const r = db.racesById[id];
+    const r = findRace(id);
     if (!r) return up({ raceId: '' });
-    const typeId = r.type.replace(/\s+/g, '-');
-    up({ raceId: id, size: r.size, type: TYPES.find((t) => t.id === typeId) ? typeId : 'humanoid', speed: { ...def.speed, land: r.speed } });
+    const typeId = String(r.type || 'humanoid').replace(/\s+/g, '-');
+    up({ raceId: id, size: r.size || 'Medium', type: TYPES.find((t) => t.id === typeId) ? typeId : 'humanoid', speed: { ...def.speed, land: Number(r.speed) || 30 },
+      ...(r.languages ? { languages: r.languages } : {}) });
   };
   return html`<${Section} title="Raça" id="race">
     <div class="grid">
@@ -178,10 +183,10 @@ function NpcRaceSection({ def, up, db, c }) {
       <${Field} label="Tipo"><${Select} value=${def.type} onChange=${(v) => up({ type: v })} options=${TYPES.map((x) => [x.id, x.name])} /></${Field}>
       <${Field} label="HD raciais" hint="Normalmente 0 para raças jogáveis; use para monstros com níveis de classe."><${Num} value=${def.racialHD} min=${0} onInput=${(v) => up({ racialHD: v })} /></${Field}>
     </div>
-    ${race ? html`<details class="traits"><summary>Traços raciais de ${race.name} (${Object.entries(race.abilityMods).map(([k, v]) => `${sign(v)} ${ABILITY_NAMES[k]}`).join(', ') || '+2 à escolha'}, ${race.size}, ${race.speed} ft.)</summary>
-      ${race.traits.filter((t) => !['Type', 'Size', 'Base Speed', 'Languages'].includes(t.name)).map((t) => html`<p><b>${t.name}:</b> ${t.text}
+    ${race ? html`<details class="traits"><summary>Traços raciais de ${race.name} (${Object.entries(race.abilityMods || {}).map(([k, v]) => `${sign(v)} ${ABILITY_NAMES[k]}`).join(', ') || '+2 à escolha'}, ${race.size}, ${race.speed} ft.)</summary>
+      ${(race.traits || []).filter((t) => !['Type', 'Size', 'Base Speed', 'Languages'].includes(t.name)).map((t) => html`<p><b>${t.name}:</b> ${t.text}
         <button class="btn tiny ghost" title="Adicionar como habilidade especial (SQ)" onClick=${() => up({ abilitiesList: [...def.abilitiesList, { id: uid(), name: t.name.replace(/\s*\((Ex|Su|Sp)\)/, ''), kind: (t.name.match(/\((Ex|Su|Sp)\)/) || [])[1] || 'Ex', placement: 'sq', short: '', text: t.text }] })}>+ SQ</button></p>`)}
-      <p><a href=${race.source} target="_blank" rel="noopener">Página da raça ↗</a></p>
+      ${race.source ? html`<p><a href=${race.source} target="_blank" rel="noopener">Página da raça ↗</a></p>` : html`<p class="muted">Raça homebrew — edite na aba Homebrew.</p>`}
     </details>` : null}
   </${Section}>`;
 }

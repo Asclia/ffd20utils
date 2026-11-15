@@ -35,7 +35,7 @@ programa não apaga a biblioteca.
 | **Criação de Monstros** | Regras de criação de monstros: CR alvo, tipo e HD sugeridos (tabela PF1e), subtipos do FFd20, nível de chefe (Mini-Boss, Boss, Super Boss), MP pela *Creature MP Chart* e **análise de CR** comparando PV, CA, ataque, dano, saves e CDs com a tabela *Monster Statistics by CR*. |
 | **Criação de NPCs** | Regras de NPC do FFd20: raça (modificadores, tamanho, deslocamento, traços), classes heroicas ou básicas, arrays heroico/básico, método simplificado de perícias, **CR automático** (heroico = nível − 1; básico = nível − 2; riqueza de PJ +1), tabela de equipamento em gil e Limit Breaks só para NPCs chefes. |
 | **Biblioteca** | Pastas e subpastas (arrastar e soltar), seleção múltipla, mover, excluir, exportar `.md`/JSON, backup completo e importação. Configuração da pasta de exportação (vault do Obsidian). |
-| **Homebrew** | Subtipos, feats, habilidades e classes próprios, que passam a aparecer nos editores. |
+| **Homebrew** | Raças, subtipos, feats, habilidades e classes próprios, que passam a aparecer nos editores. Raças homebrew têm modificadores de atributo (ou +2 à escolha), tamanho, tipo, subtipos, deslocamento, idiomas, feat/graduações bônus, traços, habilidades no statblock, afinidades elementais, imunidades, sentidos e modificadores (ex.: +2 racial em Perception). |
 
 ## O que é automatizado
 

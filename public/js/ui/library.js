@@ -68,7 +68,7 @@ export function Library({ app, onOpen }) {
       }
       if (data.homebrew) {
         const hb = { ...app.homebrew };
-        for (const k of ['subtypes', 'feats', 'abilities', 'classes', 'types']) {
+        for (const k of ['subtypes', 'feats', 'abilities', 'classes', 'types', 'races']) {
           const ids = new Set((hb[k] || []).map((x) => x.id));
           hb[k] = [...(hb[k] || []), ...(data.homebrew[k] || []).filter((x) => !ids.has(x.id))];
         }
