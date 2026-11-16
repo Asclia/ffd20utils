@@ -2,7 +2,7 @@
 // computed statistics (what the stat block shows). Pure functions, no DOM.
 import {
   ABILITIES, mod, sign, SIZE_DATA, SIZES, babFor, goodSave, poorSave, bonusMP, creatureMP,
-  limitBreakUses, burstUses, burstDuration, xpForCR, crLabel, stepDice, avgDice, BOSS_IMMUNITIES, CASTER_ABBR,
+  limitBreakUses, burstUses, burstDuration, xpForCR, crLabel, stepDice, avgDice, BOSS_IMMUNITIES, CASTER_ABBR, suggestedHD, statsForCR,
 } from './tables.js';
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
@@ -20,7 +20,7 @@ export function newCreature(mode = 'monster') {
     cr: npc ? null : 1, crOverride: null, mythic: 0,
     alignment: 'N', size: 'Medium', type: npc ? 'humanoid' : 'magical-beast', subtypes: npc ? [] : [],
     raceId: npc ? 'hume' : '', raceBonus: 'str',
-    racialHD: npc ? 0 : 2, hdDie: null, goodSaves: null,
+    racialHD: npc ? 0 : 2, autoHD: !npc, autoNaturalArmor: !npc, hdDie: null, goodSaves: null, swarmExtra: '',
     classes: npc ? [{ id: uid(), classId: 'warrior', level: 1 }] : [], favored: 'hp',
     abilities: npc ? { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 } : { str: 14, dex: 12, con: 12, int: 4, wis: 10, cha: 8 },
     abilityAdjust: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -90,7 +90,7 @@ export function compute(def, db) {
   // ---- type & subtypes
   const type = TYPE_BY_ID[d.type] || (hb.types || []).find((t) => t.id === d.type) || TYPE_BY_ID.humanoid;
   out.type = type;
-  const subtypeDefs = (d.subtypes || []).map((sid) => SUBTYPE_BY_ID[sid] || (hb.subtypes || []).find((s) => s.id === sid) || { id: sid, name: sid, custom: true });
+  const subtypeDefs = (d.subtypes || []).map((sid) => SUBTYPE_BY_ID[sid] || (hb.subtypes || []).find((s) => s.id === sid) || (db.pfSubtypesById || {})[sid] || { id: sid, name: sid, custom: true });
   if (race) for (const rs of race.subtypes || []) if (!d.subtypes.includes(rs) && !subtypeDefs.find((x) => x.id === rs)) subtypeDefs.unshift(SUBTYPE_BY_ID[rs] || { id: rs, name: rs });
   out.subtypes = subtypeDefs;
   // homebrew races carry subtype-like traits (elements, immunities, senses, modifiers, abilities)
@@ -143,7 +143,8 @@ export function compute(def, db) {
   // ---- HD & classes
   const classes = (d.classes || []).filter((c) => c.level > 0).map((c) => ({ ...c, def: classesDB[c.classId] || (hb.classes || []).find((x) => x.id === c.classId) })).filter((c) => c.def);
   const classLevels = classes.reduce((s, c) => s + Number(c.level), 0);
-  const racialHD = Math.max(0, Number(d.racialHD) || 0);
+  // Monsters: Hit Dice follow the PF1e "HD by type and CR" table unless the user typed a value
+  const racialHD = d.mode !== 'npc' && d.autoHD && d.cr !== null && d.cr !== undefined ? suggestedHD(type.id, Number(d.cr)) : Math.max(0, Number(d.racialHD) || 0);
   const hd = racialHD + classLevels;
   out.hd = hd; out.racialHD = racialHD; out.classLevels = classLevels; out.classes = classes;
   const hdDie = (isBossTier && d.bossD12) ? 12 : (d.hdDie || flags.hdDie || type.hd);
@@ -291,6 +292,7 @@ export function compute(def, db) {
   out.spellDCNotes = mods.filter((x) => x.cond && x.target === 'spellDC').map((x) => `${sign(x.value)} ${x.cond}`);
 
   // ---- AC
+  if (flags.incorporeal) mods.push({ target: 'ac', value: Math.max(1, m.cha), type: 'deflection', source: 'incorporeal' });
   const acParts = [];
   const acMods = mods.filter((x) => x.target === 'ac' && !x.cond);
   let maxDex = Infinity;
@@ -319,7 +321,27 @@ export function compute(def, db) {
   if (armorBonus) armorBonus += armorFeat;
   if (shieldBonus) shieldBonus += shieldFeat;
   const naturalFeat = acMods.filter((x) => x.type === 'natural-feat').reduce((s, x) => s + x.value, 0);
-  const natural = (Number(d.naturalArmor) || 0) + naturalFeat + Math.max(0, ...acMods.filter((x) => x.type === 'natural').map((x) => x.value), 0);
+  const dexToAC0 = Math.min(m.dex, maxDex);
+  const otherSum0 = (() => {
+    const o = {};
+    for (const x of acMods) {
+      if (['armor-feat', 'armor-feat2', 'shield-feat', 'shield-feat2', 'natural-feat', 'natural', 'armor-item'].includes(x.type)) continue;
+      const t = x.type || 'untyped';
+      if (t === 'dodge' || t === 'untyped' || x.value < 0) o[t] = (o[t] || 0) + x.value; else o[t] = Math.max(o[t] ?? -Infinity, x.value);
+    }
+    return Object.values(o).reduce((a, b) => a + b, 0);
+  })();
+  const naturalExtra = naturalFeat + Math.max(0, ...acMods.filter((x) => x.type === 'natural').map((x) => x.value), 0);
+  let baseNatural = Number(d.naturalArmor) || 0;
+  // Monsters: natural armor fills the gap to the "AC by CR" target (PF1e Monster Statistics by CR)
+  const crForAC = d.crOverride !== null && d.crOverride !== undefined && d.crOverride !== '' ? Number(d.crOverride) : d.cr;
+  if (d.mode !== 'npc' && d.autoNaturalArmor && crForAC !== null && crForAC !== undefined) {
+    const target = statsForCR(Number(crForAC)).ac;
+    const without = 10 + armorBonus + shieldBonus + naturalExtra + dexToAC0 + sz.mod + otherSum0;
+    baseNatural = Math.max(0, target - without);
+  }
+  out.naturalArmorBase = baseNatural;
+  const natural = baseNatural + naturalExtra;
   const dexToAC = Math.min(m.dex, maxDex);
   const other = {};
   for (const x of acMods) {
@@ -449,14 +471,25 @@ export function compute(def, db) {
       out.attacks[kind].push(parts.join(', '));
     }
   }
+  // swarm / troop attacks: automatic damage by HD (PF1e swarm and troop subtypes); troops add Str
+  if (flags.swarm || flags.troop) {
+    const dice = `${Math.min(5, 1 + Math.floor((hd - 1) / 5))}d6`;
+    const kind = flags.troop ? 'troop' : 'swarm';
+    const bonus = flags.troop ? m.str : 0;
+    const extra = [flags.swarm ? 'distraction' : '', d.swarmExtra].filter(Boolean).join(' and ');
+    const text = `${kind} (${dice}${bonus ? sign(bonus) : ''}${extra ? ` plus ${extra}` : ''})`;
+    out.attacks.melee.unshift(text);
+    out.attackDetails.push({ id: '__swarm', text, att: null, dmgAvg: avgDice(dice) + bonus, count: 1, kind: 'melee' });
+  }
   // average damage of full attack (for CR analysis): sum over first group per kind
   const firstGroup = (d.attacks || []).length ? Math.min(...d.attacks.map((a) => a.group || 1)) : 1;
-  out.fullAttackAvg = out.attackDetails.filter((x) => (d.attacks.find((a) => a.id === x.id)?.group || 1) === firstGroup).reduce((s, x) => s + x.dmgAvg * x.count, 0);
-  out.bestAttack = out.attackDetails.length ? Math.max(...out.attackDetails.map((x) => x.att)) : null;
+  out.fullAttackAvg = out.attackDetails.filter((x) => x.id === '__swarm' || (d.attacks.find((a) => a.id === x.id)?.group || 1) === firstGroup).reduce((s, x) => s + x.dmgAvg * x.count, 0);
+  const atks = out.attackDetails.filter((x) => x.att !== null);
+  out.bestAttack = atks.length ? Math.max(...atks.map((x) => x.att)) : null;
 
   // ---- space / reach
-  out.space = d.spaceOverride || sz.space;
-  out.reach = d.reachOverride !== '' && d.reachOverride !== null && d.reachOverride !== undefined ? d.reachOverride : `${sz.reach} ft.`;
+  out.space = d.spaceOverride || (flags.swarm ? '10 ft.' : flags.troop ? '20 ft.' : sz.space);
+  out.reach = d.reachOverride !== '' && d.reachOverride !== null && d.reachOverride !== undefined ? d.reachOverride : flags.swarm ? '0 ft.' : `${sz.reach} ft.`;
   out.showSpace = out.space !== '5 ft.' || out.reach !== '5 ft.' || !!d.reachNotes;
 
   // ---- skills
@@ -728,7 +761,6 @@ export function computeCR(d, out) {
 }
 
 // ------------------------------------------------------------------ CR analysis (monster creation sanity check)
-import { statsForCR } from './tables.js';
 export function crAnalysis(def, c) {
   const t = statsForCR(c.cr);
   if (!t) return null;

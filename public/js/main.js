@@ -7,6 +7,7 @@ import { Library } from './ui/library.js';
 import { Homebrew } from './ui/homebrew.js';
 import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
 import { debounce, deepClone } from './util.js';
+import { SUBTYPE_BY_ID } from './rules/types.js';
 
 const TABS = [
   ['bestiary', 'Bestiário'],
@@ -18,13 +19,16 @@ const TABS = [
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [classes, feats, spells, races, talentsByClass, archetypes, items] = await Promise.all(
-    ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json'].map(get));
+  const [classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypesRaw] = await Promise.all(
+    ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json'].map(get));
+  // Pathfinder subtypes not already defined with FFd20 rules (types.js)
+  const pfSubtypes = pfSubtypesRaw.filter((x) => !SUBTYPE_BY_ID[x.id]).map((x) => ({ id: x.id, name: x.name, traits: x.text, pf: true }));
   archetypes.sort((a, b) => a.name.localeCompare(b.name));
   classes.sort((a, b) => a.name.localeCompare(b.name));
   races.sort((a, b) => a.name.localeCompare(b.name));
   return {
-    classes, feats, spells, races, talentsByClass, archetypes, items,
+    classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypes,
+    pfSubtypesById: Object.fromEntries(pfSubtypes.map((x) => [x.id, x])),
     archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
     classesById: Object.fromEntries(classes.map((c) => [c.id, c])),
     racesById: Object.fromEntries(races.map((r) => [r.id, r])),
@@ -38,6 +42,8 @@ function normalize(e) {
   for (const k of ['speed', 'caster', 'tactics', 'abilities', 'abilityAdjust', 'abilityNone', 'image']) out[k] = { ...base[k], ...(e[k] || {}) };
   for (const k of ['attacks', 'feats', 'armor', 'abilitiesList', 'modifiers', 'subtypes', 'classes', 'senses', 'immunities', 'burst', 'talents']) if (!Array.isArray(out[k])) out[k] = [];
   out.equipment = { ...base.equipment, ...(e.equipment || {}) };
+  if (e.autoHD === undefined) out.autoHD = false;
+  if (e.autoNaturalArmor === undefined) out.autoNaturalArmor = false;
   out.equipment.slots = { ...(out.equipment.slots || {}) };
   return out;
 }

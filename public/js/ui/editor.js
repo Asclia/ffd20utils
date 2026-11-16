@@ -47,7 +47,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
     <div class="ed-columns">
       <div class="ed-form">
         <${IdentitySection} def=${def} up=${up} folders=${folders} app=${app} />
-        ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} homebrew=${homebrew} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} />`}
+        ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} homebrew=${homebrew} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} db=${db} />`}
         <${ClassesSection} def=${def} up=${up} db=${db} c=${c} npc=${npc} homebrew=${homebrew} />
         <${TalentsSection} def=${def} up=${up} c=${c} />
         <${AbilitiesSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
@@ -57,7 +57,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
         <${FeatsSection} def=${def} up=${up} c=${c} db=${db} homebrew=${homebrew} />
         <${SkillsSection} def=${def} up=${up} c=${c} npc=${npc} />
         <${MagicSection} def=${def} up=${up} upIn=${upIn} c=${c} db=${db} npc=${npc} />
-        <${AbilitiesListSection} def=${def} up=${up} c=${c} homebrew=${homebrew} />
+        <${AbilitiesListSection} def=${def} up=${up} c=${c} homebrew=${homebrew} db=${db} />
         ${(def.boss === 'boss' || def.boss === 'super') ? html`<${BossSection} def=${def} up=${up} c=${c} />` : null}
         <${ModifiersSection} def=${def} up=${up} />
         <${ExtrasSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
@@ -77,8 +77,9 @@ function IdentitySection({ def, up, folders, app }) {
   const uploadFile = async (file) => {
     if (!file || !file.type.startsWith('image/')) return toast('Selecione um arquivo de imagem.', 'error');
     try {
+      const transparent = await hasTransparency(file);
       const url = await app.store.uploadImage(file);
-      up({ image: { src: url, kind: 'local' } });
+      up({ image: { src: url, kind: 'local', transparent } });
       toast('Imagem adicionada.');
     } catch (e) { toast(`Falha ao enviar imagem: ${e.message}`, 'error'); }
   };
@@ -98,13 +99,15 @@ function IdentitySection({ def, up, folders, app }) {
       onDragOver=${(e) => e.preventDefault()} onDrop=${(e) => { e.preventDefault(); uploadFile(e.dataTransfer.files[0]); }}>
       <div class="image-preview">${def.image?.src ? html`<img src=${def.image.src} alt="" />` : html`<span>Sem imagem<br /><small>arraste, cole (Ctrl+V) ou escolha</small></span>`}</div>
       <div class="image-controls">
-        <${Field} label="Link da imagem (URL)"><${Text} value=${def.image?.kind === 'url' ? def.image.src : ''} placeholder="https://…" onInput=${(v) => up({ image: { src: v.trim(), kind: v.trim() ? 'url' : '' } })} /></${Field}>
+        <${Field} label="Link da imagem (URL)"><${Text} value=${def.image?.kind === 'url' ? def.image.src : ''} placeholder="https://…" onInput=${(v) => up({ image: { src: v.trim(), kind: v.trim() ? 'url' : '', transparent: !!def.image?.transparent } })} /></${Field}>
         <div class="row">
           <button class="btn small" onClick=${() => fileRef.current.click()}>Arquivo local…</button>
           ${def.image?.src ? html`<button class="btn small ghost" onClick=${() => up({ image: { src: '', kind: '' } })}>Remover</button>` : null}
           <input ref=${fileRef} type="file" accept="image/*" style="display:none" onChange=${(e) => uploadFile(e.target.files[0])} />
         </div>
         ${def.image?.kind === 'local' ? html`<div class="muted small">Arquivo local guardado na biblioteca.</div>` : null}
+        ${def.image?.src ? html`<${Check} label="Fundo transparente (sem moldura)" checked=${!!def.image.transparent} onChange=${(v) => up({ image: { ...def.image, transparent: v } })}
+          title="Detectado automaticamente em arquivos locais; marque para imagens de link com fundo transparente" />` : null}
       </div>
     </div>
   </${Section}>`;
@@ -118,9 +121,9 @@ export function folderPath(folders, id) {
 }
 
 // ------------------------------------------------------------------ monster type & CR
-function MonsterTypeSection({ def, up, c, homebrew }) {
+function MonsterTypeSection({ def, up, c, homebrew, db }) {
   const allTypes = [...TYPES, ...(homebrew.types || [])];
-  const allSub = [...SUBTYPES, ...(homebrew.subtypes || []).map((s) => ({ ...s, group: 'Homebrew' }))];
+  const allSub = [...SUBTYPES, ...(homebrew.subtypes || []).map((s) => ({ ...s, group: 'Homebrew' })), ...(db.pfSubtypes || []).map((s) => ({ ...s, group: 'Pathfinder' }))];
   const [custom, setCustom] = useState('');
   const sugg = suggestedHD(def.type, def.cr);
   const addSub = (id) => { if (id && !def.subtypes.includes(id)) up({ subtypes: [...def.subtypes, id] }); };
@@ -129,8 +132,9 @@ function MonsterTypeSection({ def, up, c, homebrew }) {
     <div class="grid">
       <${Field} label="CR"><${Select} value=${def.cr} onChange=${(v) => up({ cr: Number(v) })} options=${CR_LIST.map((x) => [x, crLabel(x)])} /></${Field}>
       <${Field} label="Tipo"><${Select} value=${def.type} onChange=${(v) => up({ type: v })} options=${allTypes.map((x) => [x.id, x.name])} /></${Field}>
-      <${Field} label="HD raciais" hint="Dados de Vida do tipo. O botão sugere pela tabela de HD por tipo e CR.">
-        <div class="row"><${Num} value=${def.racialHD} min=${0} onInput=${(v) => up({ racialHD: v })} /><button class="btn small" onClick=${() => up({ racialHD: sugg })} title="Tabela PF1e de HD por tipo/CR">Sugerir: ${sugg}</button></div>
+      <${Field} label="HD raciais" hint="Automático: segue a tabela de HD por tipo e CR do PF1e. Digite um valor para fixar manualmente.">
+        <div class="row"><${Num} value=${def.autoHD ? c.racialHD : def.racialHD} min=${0} onInput=${(v) => up({ racialHD: v, autoHD: false })} />
+        ${def.autoHD ? html`<span class="auto-chip" title="Tabela PF1e de HD por tipo/CR">auto</span>` : html`<button class="btn small" onClick=${() => up({ autoHD: true })} title="Voltar a seguir a tabela">tabela: ${sugg}</button>`}</div>
       </${Field}>
       <${Field} label="Dado de Vida"><${Select} value=${def.hdDie || ''} onChange=${(v) => up({ hdDie: v ? Number(v) : null })} options=${[['', `auto (d${t.hd})`], ['6', 'd6'], ['8', 'd8'], ['10', 'd10'], ['12', 'd12']]} /></${Field}>
       <${Field} label="Saves bons" hint="Padrão do tipo; altere para Humanoid/Outsider etc.">
@@ -291,7 +295,10 @@ function DefenseSection({ def, up, upIn, c }) {
   const nonElemImm = c.immunities.filter((x) => !ELEMENTS.includes(x));
   return html`<${Section} title="Defesa" id="def" badge=${`CA ${c.ac.ac} · PV ${c.hp.avg}`}>
     <div class="grid">
-      <${Field} label="Armadura natural"><${Num} value=${def.naturalArmor} onInput=${(v) => up({ naturalArmor: v })} /></${Field}>
+      ${def.mode !== 'npc' ? html`<${Field} label="Armadura natural" hint="Automático: completa a CA alvo do CR (tabela Monster Statistics by CR). Digite um valor para fixar.">
+        <div class="row"><${Num} value=${def.autoNaturalArmor ? c.naturalArmorBase : def.naturalArmor} onInput=${(v) => up({ naturalArmor: v, autoNaturalArmor: false })} />
+        ${def.autoNaturalArmor ? html`<span class="auto-chip">auto</span>` : html`<button class="btn small" onClick=${() => up({ autoNaturalArmor: true })}>auto</button>`}</div></${Field}>`
+      : html`<${Field} label="Armadura natural"><${Num} value=${def.naturalArmor} onInput=${(v) => up({ naturalArmor: v })} /></${Field}>`}
       <${Field} label="PV extras" hint="Somado aos PV (ex.: template)"><${Num} value=${def.hpBonus} onInput=${(v) => up({ hpBonus: v })} /></${Field}>
       <${Field} label="DR"><${Text} value=${def.dr} placeholder="5/adamantine" onInput=${(v) => up({ dr: v })} /></${Field}>
       <${Field} label="SR" hint="Vazio = automático pelo subtipo/chefe"><div class="row"><${Num} value=${def.sr} allowEmpty onInput=${(v) => up({ sr: v })} /><${Check} label="CR+11" checked=${def.srAuto} onChange=${(v) => up({ srAuto: v })} /></div></${Field}>
@@ -397,6 +404,8 @@ function OffenseSection({ def, up, upIn, c }) {
       <${Field} label="Espaço" hint=${`Padrão: ${c.space}`}><${Text} value=${def.spaceOverride} placeholder=${SIZE_DATA[def.size].space} onInput=${(v) => up({ spaceOverride: v })} /></${Field}>
       <${Field} label="Alcance" hint="Ex.: 10 ft."><${Text} value=${def.reachOverride} placeholder=${`${SIZE_DATA[def.size].reach} ft.`} onInput=${(v) => up({ reachOverride: v })} /></${Field}>
       <${Field} label="Notas de alcance"><${Text} value=${def.reachNotes} placeholder="15 ft. with bite" onInput=${(v) => up({ reachNotes: v })} /></${Field}>
+      ${c.subtypes.some((x) => x.id === 'swarm' || x.id === 'troop') ? html`<${Field} label="Efeito extra do ataque de swarm/troop" hint="Ex.: poison, disease, 1d6 fire. O dano base vem do HD automaticamente.">
+        <${Text} value=${def.swarmExtra} placeholder="poison" onInput=${(v) => up({ swarmExtra: v })} /></${Field}>` : null}
       <${Field} label="Special Attacks (texto extra)" wide><${Text} value=${def.statusInflicts} placeholder="berserk (DC 14), poison" onInput=${(v) => up({ statusInflicts: v })} /></${Field}>
     </div>
   </${Section}>`;
@@ -510,8 +519,9 @@ function SkillsSection({ def, up, c, npc }) {
 // ------------------------------------------------------------------ magic
 function MagicSection({ def, up, upIn, c, db, npc }) {
   const casterClasses = c.classes.filter((x) => x.def.caster).map((x) => x.def.id);
-  const spellLists = [...new Set(db.spells.map((s) => s.class))];
-  const [list, setList] = useState(casterClasses[0] || 'black-mage');
+  const spellLists = [...new Set(db.spells.map((s) => s.class))].sort();
+  const defaultList = casterClasses.map((id) => SPELL_LIST_OF[id] || id).flat().find((x) => spellLists.includes(x)) || '__all';
+  const [list, setList] = useState(defaultList);
   const [lvFilter, setLvFilter] = useState('');
   const [custom, setCustom] = useState({ name: '', level: 1 });
   const maxSL = c.mp.maxSL;
@@ -520,7 +530,12 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
   const removeSpell = (id) => upIn('caster', { spells: spells.filter((x) => x.id !== id) });
   const byLevel = {};
   for (const s of spells) (byLevel[s.level] = byLevel[s.level] || []).push(s);
-  const items = useMemo(() => db.spells.filter((s) => s.class === list), [db.spells, list]);
+  const items = useMemo(() => {
+    const mine = casterClasses.map((id) => SPELL_LIST_OF[id] || [id]);
+    const ids = list === '__all' || (list === '__mine' && mine.some((x) => !x.length)) ? null : list === '__mine' ? mine.flat() : [list];
+    const seen = new Set();
+    return db.spells.filter((s) => (!ids || ids.includes(s.class)) && !seen.has(s.name + s.level) && seen.add(s.name + s.level));
+  }, [db.spells, list, casterClasses.join()]);
   return html`<${Section} title="Magia (MP)" id="magic" badge=${c.mp.total ? `${c.mp.total} MP` : ''} open=${!!c.mp.total}>
     <div class="grid">
       <${Field} label="Conjurador (monstro)" hint="Tabela Creature MP Chart do FFd20. Criaturas com classes conjuradoras usam o MP da classe.">
@@ -535,13 +550,14 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
     <h4>Magias conhecidas</h4>
     ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => html`<span class="chip">${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`)}</div>`)}
     <div class="row wrap">
-      <${Select} value=${list} onChange=${setList} options=${spellLists.map((x) => [x, `Lista: ${x.replace(/-/g, ' ')}`])} />
+      <${Select} value=${list} onChange=${setList} options=${[...(casterClasses.length ? [['__mine', 'Listas das minhas classes']] : []), ['__all', 'Todas as listas'], ...spellLists.map((x) => [x, `Lista: ${x.replace(/-/g, ' ')}`])]} />
       <${Select} value=${lvFilter} onChange=${setLvFilter} options=${[['', 'todos os níveis'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), `nível ${l}`])]} />
       ${maxSL ? html`<span class="muted small">Nível máximo: ${ordinal(maxSL)}</span>` : null}
     </div>
     <${SearchPicker} items=${items} getText=${(s) => s.name} onPick=${addSpell} placeholder="Buscar magia…"
       filter=${(s) => (lvFilter === '' || s.level === Number(lvFilter)) && (!maxSL || s.level <= maxSL || lvFilter !== '')}
-      renderItem=${(s) => html`<span><b>${s.name}</b> <span class="src-badge">${s.level}</span> <span class="small muted">${s.summary?.slice(0, 120)}</span></span>`} />
+      renderItem=${(s) => html`<span><b>${s.name}</b> <span class="src-badge">nv ${s.level}${list.startsWith('__') ? ` · ${s.class.replace(/-/g, ' ')}` : ''}</span>
+        ${s.school ? html` <span class="small muted">${s.school}${s.save ? ` · save: ${s.save}` : ''}${s.range ? ` · ${s.range}` : ''}</span>` : null}<br /><span class="small muted">${s.summary?.slice(0, 160)}</span></span>`} />
     <div class="row">
       <input type="text" placeholder="Magia personalizada" value=${custom.name} onInput=${(e) => setCustom({ ...custom, name: e.target.value })} />
       <label class="inline">nível <${Num} value=${custom.level} min=${0} max=${9} onInput=${(v) => setCustom({ ...custom, level: v })} /></label>
@@ -556,11 +572,16 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
 }
 
 // ------------------------------------------------------------------ special abilities & class features
-function AbilitiesListSection({ def, up, c, homebrew }) {
-  const templates = [...(homebrew.abilities || []).map((a) => ({ ...a, group: 'Homebrew' })), ...ABILITY_TEMPLATES.map((a) => ({ ...a, group: 'Universal Monster Rules' }))];
-  const addTemplate = (name) => {
-    const t = templates.find((x) => x.name === name);
-    if (t) up({ abilitiesList: [...def.abilitiesList, { id: uid(), name: t.name, kind: t.kind, placement: t.placement, short: t.short, text: t.text }] });
+function AbilitiesListSection({ def, up, c, homebrew, db }) {
+  const umrNames = new Set((db.umr || []).map((u) => u.name.toLowerCase()));
+  const templates = [...(homebrew.abilities || []).map((a) => ({ ...a, group: 'Homebrew' })),
+    ...(db.umr || []).map((u) => ({ ...u, group: u.source })),
+    ...ABILITY_TEMPLATES.filter((a) => !umrNames.has(a.name.toLowerCase())).map((a) => ({ ...a, group: 'FFd20' }))];
+  const addTemplate = (t) => {
+    if (!t) return;
+    if (t.placement === 'sense') return up({ senses: [...new Set([...(def.senses || []), t.short])] });
+    const placement = ['speed', 'hp'].includes(t.placement) ? 'sq' : t.placement;
+    up({ abilitiesList: [...def.abilitiesList, { id: uid(), name: t.name, kind: t.kind, placement, short: t.short, text: t.text }] });
   };
   const setFeature = (key, patch) => up({ classFeatures: { ...def.classFeatures, [key]: { ...(def.classFeatures?.[key] || {}), ...patch } } });
   const byClass = {};
@@ -579,7 +600,10 @@ function AbilitiesListSection({ def, up, c, homebrew }) {
         <input type="text" value=${a.short} placeholder="texto na linha (ex.: breath weapon (30-ft. cone, 6d6 fire, DC {dcCon}))" onInput=${(e) => set({ short: e.target.value })} />
         <textarea rows="2" value=${a.text} placeholder="Descrição completa (Special Abilities)" onInput=${(e) => set({ text: e.target.value })}></textarea>
       </div>`} />
-    <${Select} value="" onChange=${addTemplate} options=${[{ value: '', label: '+ Inserir modelo (UMR / homebrew)…' }, ...templates.map((t) => ({ value: t.name, label: t.name, group: t.group }))]} />
+    <div class="muted small">Universal Monster Rules do FFd20 e do Pathfinder (${templates.length}) — o texto já vem no formato do statblock e na linha certa; CDs viram {dcCon}/{dcMental} automaticamente.</div>
+    <${SearchPicker} items=${templates} getText=${(t) => t.name} onPick=${addTemplate} limit=${80} placeholder="+ Buscar Universal Monster Rule (grab, pounce, breath weapon, drench…)"
+      renderItem=${(t) => html`<span><b>${t.name}</b>${t.kind ? ` (${t.kind})` : ''} <span class="src-badge">${t.group}${t.location ? ` · ${t.location}` : ''}</span>${t.requires ? html` <span class="small warn">${t.requires}</span>` : null}
+        <br /><span class="small muted">${(t.text || '').slice(0, 180)}</span></span>`} />
     ${c.classFeatureList.length ? html`<h4>Características de classe (automáticas)</h4>
       <div class="muted small">Escolha onde cada característica aparece no statblock, adicione notas (ex.: talentos escolhidos) ou mostre a descrição completa.</div>
       ${Object.entries(byClass).map(([cls, list]) => html`<details class="cf-group" open><summary>${cls} (${list.length})</summary>
@@ -707,4 +731,34 @@ function archOverlap(archs) {
     seen[k] = a.id;
   }
   return [...out];
+}
+
+// Classes whose spells come from other classes' lists (finalfantasyd20.com class pages)
+const SPELL_LIST_OF = { scholar: ['black-mage', 'white-mage'], 'lil-witch': ['black-mage', 'white-mage'], cleric: ['cleric', 'white-mage'], arithmetician: [], 'seed-operative': [] };
+
+// True when an image file has (partly) transparent pixels — used to drop the frame in stat blocks.
+function hasTransparency(file) {
+  if (!/png|webp|gif|avif|svg/.test(file.type)) return Promise.resolve(false);
+  if (/svg/.test(file.type)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = Math.min(img.width, 200);
+        const h = Math.max(1, Math.round(img.height * (w / img.width)));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const data = ctx.getImageData(0, 0, w, h).data;
+        let clear = 0;
+        for (let i = 3; i < data.length; i += 4) if (data[i] < 200) clear++;
+        resolve(clear / (w * h) > 0.02);
+      } catch { resolve(false); }
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+  });
 }

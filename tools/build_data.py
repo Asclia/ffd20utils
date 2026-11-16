@@ -351,7 +351,7 @@ def parse_spells(path, s):
     # pair each table with its title
     for m in re.finditer(r'<h2[^>]*>(.*?)</h2>\s*(<table.*?</table>)', body, flags=re.S):
         title = one_line(m.group(1))
-        lv = 0 if re.search(r'\b0-Level|Cantrip|Jutsu', title, re.I) else ordinal(title)
+        lv = 0 if re.search(r'\b0-Level|Cantrip|\bJutsus?\b', title, re.I) else ordinal(title)
         for row in tables(m.group(2))[0][1:]:
             if len(row) >= 2 and row[0]:
                 out.append({'name': row[0].strip(), 'level': lv, 'class': cls, 'summary': row[1].strip()})
@@ -630,6 +630,98 @@ def build_items(pages_dir, files):
     }
 
 
+# --------------------------------------------------------------------------- spells (individual pages)
+CLASS_NAME_FIX = {'holy knight': 'paladin', 'sage': 'scholar', 'lil witch': 'lil-witch', "lil' witch": 'lil-witch'}
+
+
+def parse_spell_page(path, s):
+    title = one_line(re.search(r'<h1 class="page-title">(.*?)</h1>', s, re.S).group(1))
+    text = clean(page_content(s))
+    head = re.search(r'School\s+(.*?);\s*Level\s+([^\n]+)', text)
+    if not head:
+        return []
+    school = head.group(1).strip()
+    levels = []
+    for part in head.group(2).split(','):
+        m = re.match(r'\s*(.+?)\s+(\d)\s*$', part.strip())
+        if m:
+            cname = m.group(1).strip().lower().replace('’', "'")
+            levels.append((slug(CLASS_NAME_FIX.get(cname, cname)), int(m.group(2))))
+
+    def field(label):
+        m = re.search(r'(?m)^' + label + r'\s+(.+)$', text)
+        return m.group(1).strip() if m else ''
+    save = field('Saving Throw')
+    sr = ''
+    if ';' in save and 'Spell Resistance' in save:
+        save, sr = [x.strip() for x in save.split(';', 1)]
+        sr = sr.replace('Spell Resistance', '').strip()
+    desc = text.split('DESCRIPTION', 1)[1].strip() if 'DESCRIPTION' in text else ''
+    base = {'name': title, 'school': school, 'castingTime': field('Casting Time'), 'range': field('Range'),
+            'target': field('Target') or field('Targets') or field('Area') or field('Effect'),
+            'duration': field('Duration'), 'save': save, 'sr': sr,
+            'summary': re.sub(r'\s+', ' ', desc)[:300], 'url': 'https://finalfantasyd20.com/' + path.replace('__', '/') + '/'}
+    return [dict(base, **{'class': c, 'level': lv}) for c, lv in levels]
+
+
+# --------------------------------------------------------------------------- universal monster rules
+LOCATION_MAP = [('special attack', 'specialAttack'), ('melee', 'specialAttack'), ('individual attack', 'specialAttack'),
+                ('defensive', 'defensive'), ('immune', 'defensive'), ('resist', 'defensive'), ('dr', 'defensive'),
+                ('weakness', 'defensive'), ('aura', 'aura'), ('sq', 'sq'), ('senses', 'sense'), ('speed', 'speed'),
+                ('special abilit', 'specialAbility'), ('hp', 'hp')]
+
+
+def parse_umr(html_text, source, skip_3pp=True):
+    out = []
+    for lvl, head, body in sections(html_text):
+        if lvl != 3:
+            continue
+        if skip_3pp and ('[3PP]' in head or '[MA]' in head):
+            continue
+        m = re.match(r'(.*?)\s*\((Ex|Su|Sp|Ex or Su|Su or Ex|Su or Sp|Ex, Sp, or Su|Ex or Sp)\)\s*(\[[^\]]*\])?\s*\*?$', head)
+        if not m:
+            continue
+        name, kind, req = m.group(1).strip(' *'), m.group(2), (m.group(3) or '').strip('[]')
+        text = clean(body)
+        # d20pfsrd puts FAQ / editor's notes (each closed by "[Source]") before the rule text
+        if '[Source' in text:
+            tail = re.split(r'\[Source[^\]]*\]', text)[-1].strip()
+            if len(tail) > 40:
+                text = tail
+        text = re.sub(r'^\[Source[^\]]*\]\s*', '', text)
+        fm = re.search(r'Format:\s*(.+?)(?:;|\n|$)', text)
+        lm = re.search(r'Location:\s*(.+?)(?:\.|\n|$)', text)
+        loc = (lm.group(1) if lm else '').lower()
+        placement = 'specialAttack'
+        for key, val in LOCATION_MAP:
+            if key in loc:
+                placement = val
+                break
+        body_text = re.split(r'\n?Format:', text)[0].strip()
+        short = fm.group(1).strip().rstrip('.') if fm else name.lower()
+        dc_var = '{dcCon}' if kind.startswith('Ex') else '{dcMental}'
+        if re.search(r"Charisma modifier|Cha modifier|Cha mod", text):
+            dc_var = '{dcCha}'
+        elif re.search(r"Constitution modifier|Con modifier|Con mod", text):
+            dc_var = '{dcCon}'
+        elif re.search(r"Wisdom modifier|Wis modifier", text):
+            dc_var = '{dcWis}'
+        short = re.sub(r'DC \d+', 'DC ' + dc_var, short)
+        out.append({'name': name, 'kind': kind.split(' ')[0].rstrip(','), 'placement': placement, 'short': short,
+                    'text': body_text[:1800], 'requires': req, 'location': lm.group(1).strip() if lm else '', 'source': source})
+    return out
+
+
+# --------------------------------------------------------------------------- PF subtypes
+def parse_pf_subtypes(html_text):
+    out = []
+    for lvl, head, body in sections(html_text):
+        m = re.match(r'(.+?) Subtype$', head)
+        if m:
+            out.append({'id': slug(m.group(1)), 'name': m.group(1), 'text': clean(body)[:2500]})
+    return out
+
+
 # --------------------------------------------------------------------------- main
 def main():
     if len(sys.argv) < 2:
@@ -695,7 +787,25 @@ def main():
     for f in files:
         if f.startswith('magic__spells-by-class__'):
             spells += parse_spells(f[:-5], read(f))
-    print('spells', len(spells))
+    by_class_count = len(spells)
+    key = {(x['name'].lower(), x['class']) for x in spells}
+    detail = {}
+    for f in files:
+        if f.startswith('magic__spells__') and f.count('__') == 3:
+            try:
+                for sp in parse_spell_page(f[:-5], read(f)):
+                    detail[(sp['name'].lower(), sp['class'])] = sp
+            except Exception as e:
+                print('spell parse failed', f, e)
+    for sp in spells:  # enrich by-class entries with the spell page data
+        d = detail.get((sp['name'].lower(), sp['class']))
+        if d:
+            sp.update({k: v for k, v in d.items() if k not in ('level', 'summary') or not sp.get(k)})
+    for k, sp in detail.items():
+        if k not in key:
+            spells.append(sp)
+    spells.sort(key=lambda x: (x['class'], x['level'], x['name']))
+    print('spells', by_class_count, 'from class lists +', len(spells) - by_class_count, 'from spell pages =', len(spells))
 
     # races
     races = []
@@ -732,6 +842,26 @@ def main():
                 print('archetype parse failed', f, e)
     print('archetypes', len(archetypes))
     dump('archetypes.json', archetypes)
+
+    umr = []
+    ff_umr = os.path.join(pages, 'gamemastering__bestiary__universal-monster-rules.html')
+    if os.path.exists(ff_umr):
+        with open(ff_umr, encoding='utf8') as fh:
+            umr += parse_umr(page_content(fh.read()), 'FFd20')
+    pf_umr = os.path.join(cache, 'pf_bestiary_rules-for-monsters_universal-monster-rules_.html')
+    if os.path.exists(pf_umr):
+        names = {u['name'].lower() for u in umr}
+        with open(pf_umr, encoding='utf8') as fh:
+            umr += [u for u in parse_umr(fh.read(), 'Pathfinder') if u['name'].lower() not in names]
+    umr.sort(key=lambda x: x['name'])
+    print('universal monster rules', len(umr))
+    dump('umr.json', umr)
+    pf_types = os.path.join(cache, 'pf_bestiary_rules-for-monsters_creature-types_.html')
+    if os.path.exists(pf_types):
+        with open(pf_types, encoding='utf8') as fh:
+            pfsub = parse_pf_subtypes(fh.read())
+        print('pathfinder subtypes', len(pfsub))
+        dump('pf-subtypes.json', pfsub)
 
     items = build_items(pages, files)
     print('items', {k: len(v) for k, v in items.items()})

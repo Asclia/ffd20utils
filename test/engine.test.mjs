@@ -10,6 +10,8 @@ const archetypes = load('archetypes.json');
 const db = { classesById: Object.fromEntries(classes.map((c) => [c.id, c])), racesById: Object.fromEntries(races.map((r) => [r.id, r])), homebrew: {},
   talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])), items: load('items.json') };
 let passed = 0;
+// monsters whose HD / natural armor the test sets by hand
+const manualMonster = () => ({ ...newCreature('monster'), autoHD: false, autoNaturalArmor: false });
 const t = (name, fn) => { fn(); passed++; console.log('ok -', name); };
 
 t('Knight 8 NPC (heroic): BAB, saves, HP, CR', () => {
@@ -41,7 +43,7 @@ t('Basic NPC CR = level − 2; level 1 = 1/3', () => {
 });
 
 t('Monster attack with Power Attack (BAB +5, Str 18 → +9; PA −2/+4)', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.type = 'magical-beast'; d.racialHD = 5; d.abilities.str = 18;
   const a = newAttack('melee', false); a.name = 'greataxe'; a.dice = '1d12'; a.critRange = 20; a.critMult = 3; a.hands = 'two';
   d.attacks = [a];
@@ -55,7 +57,7 @@ t('Monster attack with Power Attack (BAB +5, Str 18 → +9; PA −2/+4)', () => 
 });
 
 t('Natural attacks: primary/secondary, single natural 1.5 Str', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.racialHD = 4; d.type = 'magical-beast'; d.abilities.str = 16;
   const bite = newAttack('melee', true); bite.name = 'bite'; bite.count = 1; bite.dice = '1d8';
   d.attacks = [bite];
@@ -69,7 +71,7 @@ t('Natural attacks: primary/secondary, single natural 1.5 Str', () => {
 });
 
 t('Iterative attacks and Weapon Focus', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.type = 'outsider'; d.racialHD = 11; d.abilities.str = 14;
   const a = newAttack('melee', false); a.name = 'longsword';
   d.attacks = [a];
@@ -79,7 +81,7 @@ t('Iterative attacks and Weapon Focus', () => {
 });
 
 t('Undead: no Con, Cha to HP, absorbs shadow, weak holy', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.type = 'undead'; d.racialHD = 4; d.abilities.cha = 14;
   const c = compute(d, db);
   assert.equal(c.abilities.con, null);
@@ -89,7 +91,7 @@ t('Undead: no Con, Cha to HP, absorbs shadow, weak holy', () => {
 });
 
 t('Boss: maximized dice and doubled HP, full BAB, good saves', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.type = 'undead'; d.racialHD = 10; d.abilities.cha = 24; d.boss = 'boss'; d.cr = 9;
   const c = compute(d, db);
   // Scarmiglione-style: 10d12+70 → 270 [380]
@@ -112,7 +114,7 @@ t('Black Mage 5 MP = 8 + bonus 6 (Int 18)', () => {
 });
 
 t('Monster caster tier (FC, 9 HD, boss column)', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.racialHD = 9; d.caster.tier = 'full'; d.caster.ability = 'int'; d.abilities.int = 16;
   let c = compute(d, db);
   assert.equal(c.mp.maxSL, 3);
@@ -122,7 +124,7 @@ t('Monster caster tier (FC, 9 HD, boss column)', () => {
   assert.equal(c.mp.maxSL, 5);
 });
 t('Stat block: PF1e order, FFd20 hp/MP lines, markdown + HTML escaping', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.name = 'Bomb <b>x</b>'; d.type = 'outsider'; d.racialHD = 3; d.cr = 3; d.subtypes = ['bomb', 'fire'];
   d.caster.tier = 'full'; d.caster.ability = 'int'; d.abilities.int = 12;
   d.caster.spells = [{ id: 's', name: 'Fire', level: 1 }];
@@ -141,7 +143,7 @@ t('Stat block: PF1e order, FFd20 hp/MP lines, markdown + HTML escaping', () => {
 });
 
 t('Two-weapon fighting penalties and off-hand Str', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.type = 'humanoid'; d.racialHD = 6; d.abilities.str = 16;
   const main = newAttack('melee', false); main.name = 'short sword'; main.dice = '1d6'; main.light = true;
   const off = newAttack('melee', false); off.name = 'dagger'; off.dice = '1d4'; off.light = true; off.hands = 'off';
@@ -181,7 +183,7 @@ t('FFd20 item text becomes effects (status immunity, weapon rider, conditional S
   assert.deepEqual(glass.immunities, ['poison']);
   assert.equal(parseItemEffects('This ring adds +1d6 points of fire elemental damage to melee/ranged weapon attacks.').rider, '1d6 fire');
   assert.equal(parseItemEffects('These gloves grant a +6 enhancement bonus to Strength but only while at full health.').mods[0].cond, 'while at full health');
-  const d = newCreature('monster'); d.racialHD = 3;
+  const d = manualMonster(); d.racialHD = 3;
   const sword = newAttack('melee', false); d.attacks = [sword];
   d.equipment.slots.ring1 = makeItem({ name: 'Fire Ring', text: 'This ring adds +1d6 points of fire elemental damage to melee/ranged weapon attacks.' }, 'ring1');
   d.equipment.slots.neck = makeItem({ name: 'Star Pendant', text: 'This pendant prevents the wearer from being inflicted with Poison status.' }, 'neck');
@@ -208,7 +210,7 @@ t('Archetype replaces class features; talents limited by level', () => {
 });
 
 t('Special Abilities line sits under Special Attacks', () => {
-  const d = newCreature('monster');
+  const d = manualMonster();
   d.racialHD = 4;
   d.abilitiesList = [{ id: 'a', name: 'Targeting Shot', kind: 'Ex', placement: 'specialAbility', short: 'targeting shot', text: '' },
     { id: 'b', name: 'Aim', kind: 'Ex', placement: 'specialAttack', short: 'aim (+3)', text: '' }];
@@ -234,5 +236,40 @@ t('Homebrew race: ability mods, size, senses, elements, modifiers, bonus feat', 
   assert.equal(c.featBudget, 2);
   assert.ok(c.subtypes.some((x) => x.id === 'lunarian'));
   assert.ok(c.specialAbilities.some((x) => x.name === 'Moonlit Step' && x.placement === 'specialAbility'));
+});
+t('Monster table values applied automatically: HD by type/CR and natural armor to target AC', () => {
+  const d = newCreature('monster');
+  d.type = 'outsider'; d.cr = 9; d.abilities.dex = 14;
+  let c = compute(d, db);
+  assert.equal(c.racialHD, 12);          // outsider CR 9 → 12 HD
+  assert.equal(c.ac.ac, 23);             // CR 9 target AC
+  assert.equal(c.naturalArmorBase, 23 - 10 - 2);
+  d.cr = 5; d.type = 'undead';
+  c = compute(d, db);
+  assert.equal(c.racialHD, 7); assert.equal(c.ac.ac, 18);
+  d.autoHD = false; d.racialHD = 3;
+  assert.equal(compute(d, db).racialHD, 3);
+});
+
+t('Swarm and troop: automatic attack by HD, space/reach, traits', () => {
+  const d = manualMonster();
+  d.type = 'vermin'; d.size = 'Tiny'; d.racialHD = 7; d.subtypes = ['swarm'];
+  let c = compute(d, db);
+  assert.equal(c.attacks.melee[0], 'swarm (2d6 plus distraction)');
+  assert.equal(c.space, '10 ft.'); assert.equal(c.reach, '0 ft.');
+  assert.ok(c.specialAbilities.some((x) => x.short.startsWith('distraction (DC')));
+  const t2 = manualMonster();
+  t2.type = 'humanoid'; t2.racialHD = 12; t2.subtypes = ['troop']; t2.abilities.str = 16;
+  c = compute(t2, db);
+  assert.equal(c.attacks.melee[0], 'troop (3d6+3)');
+  assert.equal(c.space, '20 ft.');
+});
+
+t('Incorporeal: deflection from Cha and crit immunity', () => {
+  const d = manualMonster();
+  d.type = 'undead'; d.racialHD = 4; d.abilities.cha = 16; d.subtypes = ['incorporeal'];
+  const c = compute(d, db);
+  assert.ok(c.ac.parts.some(([v, n]) => v === 3 && n === 'deflection'));
+  assert.ok(c.immunities.includes('critical hits'));
 });
 console.log(`${passed} tests passed`);

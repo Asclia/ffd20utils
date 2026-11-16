@@ -71,7 +71,7 @@ const crNum = (s) => { const m = s.match(/CR (\d+)(?:\/(\d+))?/); return m ? (m[
 function Card({ e, c, onClick }) {
   const type = c ? c.type.name : '';
   return html`<button class="card" onClick=${onClick} title=${e.name}>
-    <div class="card-img">${e.image?.src ? html`<img src=${e.image.src} alt="" loading="lazy" />` : html`<span class="ph">${TYPE_ICON[e.type] || '✦'}</span>`}
+    <div class="card-img">${e.image?.src ? html`<img class=${e.image.transparent ? 'transparent' : ''} src=${e.image.src} alt="" loading="lazy" />` : html`<span class="ph">${TYPE_ICON[e.type] || '✦'}</span>`}
       <span class="card-cr">CR ${c ? crLabel(c.cr) : '?'}</span>
       ${e.boss && e.boss !== 'none' ? html`<span class="card-boss">${{ mini: 'Mini-Boss', boss: 'Boss', super: 'Super Boss' }[e.boss]}</span>` : null}
     </div>

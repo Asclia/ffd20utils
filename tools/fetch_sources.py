@@ -19,10 +19,11 @@ import urllib.request
 FF = 'https://finalfantasyd20.com'
 PF_FEAT_CATEGORIES = ['combat', 'general', 'item-creation', 'metamagic', 'monster', 'teamwork', 'racial',
                       'grit', 'animal-companion', 'achievement', 'stare', 'story']
-WANT = re.compile(r'^/(classes/(core|base|hybrid|miscellaneous|npc|prestige)-classes/[^/]+/'
+WANT = re.compile(r'^/(classes/(core|base|hybrid|miscellaneous|npc|prestige)-classes/[^/]+/([a-z0-9-]+/)?(archetypes/[^/]+/)?'
+                  r'|magical-items/([^/]+/)?|equipment/weapons/([^/]+/)?'
                   r'|feats/[^/]+/([^/]+/)?|feats/'
                   r'|races/(core|base|monstrous)-races/[^/]+/|races/beastman-tribes/[^/]+/'
-                  r'|magic/spells-by-class/([^/]+/)?|magic/mp-system/'
+                  r'|magic/spells-by-class/([^/]+/)?|magic/spells/[a-z0-9]/[^/]+/|magic/mp-system/'
                   r'|gamemastering/bestiary/universal-monster-rules/([^/]+/)?)$')
 
 
@@ -65,6 +66,11 @@ def main():
 
     with cf.ThreadPoolExecutor(8) as ex:
         list(ex.map(fetch, wanted))
+    for extra in ['bestiary/rules-for-monsters/universal-monster-rules/', 'bestiary/rules-for-monsters/creature-types/']:
+        f = os.path.join(cache, 'pf_' + extra.replace('/', '_') + '.html')
+        if not os.path.exists(f):
+            with open(f, 'w', encoding='utf8') as fh:
+                fh.write(get('https://www.d20pfsrd.com/' + extra))
     for cat in PF_FEAT_CATEGORIES:
         f = os.path.join(cache, f'pf_feats_{cat}-feats_.html')
         if not os.path.exists(f):

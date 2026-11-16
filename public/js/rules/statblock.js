@@ -14,7 +14,7 @@ export function buildStatblock(d, c, db) {
 
   // ---------------- header
   B.push({ t: 'title', name: d.name || 'Unnamed', cr: crLabel(c.cr), mr: d.mythic ? `MR ${d.mythic}` : '' });
-  if (d.image?.src) B.push({ t: 'image', src: d.image.src, alt: d.name });
+  if (d.image?.src) B.push({ t: 'image', src: d.image.src, alt: d.name, transparent: !!d.image.transparent });
   if (d.flavor) B.push({ t: 'flavor', text: d.flavor });
   if (c.xp) B.push({ t: 'plain', text: `XP ${fmtNum(c.xp)}` });
   const raceName = c.race ? c.race.name : '';
@@ -158,7 +158,7 @@ export function statblockHTML(blocks, opts = {}) {
   for (const b of blocks) {
     switch (b.t) {
       case 'title': out.push(`<div class="sb-title"><span>${esc(b.name)}</span><span>CR ${esc(b.cr)}${b.mr ? `/${esc(b.mr)}` : ''}</span></div>`); break;
-      case 'image': if (!opts.noImage) out.push(`<div class="sb-image"><img src="${esc(b.src)}" alt="${esc(b.alt || '')}"></div>`); break;
+      case 'image': if (!opts.noImage) out.push(`<div class="sb-image${b.transparent ? ' transparent' : ''}"><img src="${esc(b.src)}" alt="${esc(b.alt || '')}"></div>`); break;
       case 'flavor': out.push(`<p class="sb-flavor">${esc(b.text)}</p>`); break;
       case 'plain': out.push(`<p>${safe(b.text, b.html)}</p>`); break;
       case 'line': out.push(`<p><b>${esc(b.label)}</b> ${safe(b.text, true)}</p>`); break;
