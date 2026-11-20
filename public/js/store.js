@@ -7,6 +7,9 @@ class ServerStore {
   async listEntries() { return (await fetch('/api/entries')).json(); }
   async saveEntry(e) { await this._ok(fetch(`/api/entries/${encodeURIComponent(e.id)}`, { method: 'PUT', headers: H, body: JSON.stringify(e) })); }
   async deleteEntry(id) { await this._ok(fetch(`/api/entries/${encodeURIComponent(id)}`, { method: 'DELETE', headers: H })); }
+  async listDungeons() { return (await fetch('/api/dungeons', { cache: 'no-store' })).json(); }
+  async saveDungeon(d) { await this._ok(fetch(`/api/dungeons/${encodeURIComponent(d.id)}`, { method: 'PUT', headers: H, body: JSON.stringify(d) })); }
+  async deleteDungeon(id) { await this._ok(fetch(`/api/dungeons/${encodeURIComponent(id)}`, { method: 'DELETE', headers: H })); }
   async getDoc(name, fallback) { const r = await fetch(`/api/${name}`); return r.ok ? r.json() : fallback; }
   async putDoc(name, v) { await this._ok(fetch(`/api/${name}`, { method: 'PUT', headers: H, body: JSON.stringify(v) })); }
   async uploadImage(file) {
@@ -28,11 +31,12 @@ class BrowserStore {
   db() {
     if (!this.dbp) {
       this.dbp = new Promise((resolve, reject) => {
-        const req = indexedDB.open('ffd20utils', 1);
+        const req = indexedDB.open('ffd20utils', 2);
         req.onupgradeneeded = () => {
           const db = req.result;
-          db.createObjectStore('entries', { keyPath: 'id' });
-          db.createObjectStore('docs');
+          if (!db.objectStoreNames.contains('entries')) db.createObjectStore('entries', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs');
+          if (!db.objectStoreNames.contains('dungeons')) db.createObjectStore('dungeons', { keyPath: 'id' });
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -53,6 +57,9 @@ class BrowserStore {
   listEntries() { return this.tx('entries', 'readonly', (s) => s.getAll()); }
   saveEntry(e) { return this.tx('entries', 'readwrite', (s) => s.put(e)); }
   deleteEntry(id) { return this.tx('entries', 'readwrite', (s) => s.delete(id)); }
+  listDungeons() { return this.tx('dungeons', 'readonly', (s) => s.getAll()); }
+  saveDungeon(d) { return this.tx('dungeons', 'readwrite', (s) => s.put(d)); }
+  deleteDungeon(id) { return this.tx('dungeons', 'readwrite', (s) => s.delete(id)); }
   async getDoc(name, fallback) { const v = await this.tx('docs', 'readonly', (s) => s.get(name)); return v ?? fallback; }
   putDoc(name, v) { return this.tx('docs', 'readwrite', (s) => s.put(v, name)); }
   uploadImage(file) {

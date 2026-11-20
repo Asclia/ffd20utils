@@ -138,7 +138,7 @@ def build_ironsworn(ds_dir):
     for f in files:
         d = json.load(open(f, encoding='utf8'))
         book = 'Delve' if 'delve' in os.path.basename(f) else 'Ironsworn'
-        skip_collections = {'moves', 'turning_point'}  # rules-bound oracles, not useful for dungeon prep
+        skip_collections = {'turning_point'}  # rules-bound oracles, not useful for dungeon prep
 
         def walk(node, path):
             if not isinstance(node, dict):

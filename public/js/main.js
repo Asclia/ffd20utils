@@ -5,6 +5,7 @@ import { Editor } from './ui/editor.js';
 import { Bestiary } from './ui/bestiary.js';
 import { Library } from './ui/library.js';
 import { Homebrew } from './ui/homebrew.js';
+import { Dungeons } from './ui/dungeons.js';
 import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
 import { debounce, deepClone } from './util.js';
 import { SUBTYPE_BY_ID } from './rules/types.js';
@@ -13,6 +14,7 @@ const TABS = [
   ['bestiary', 'Bestiário'],
   ['monster', 'Criação de Monstros'],
   ['npc', 'Criação de NPCs'],
+  ['dungeons', 'Masmorras'],
   ['library', 'Biblioteca'],
   ['homebrew', 'Homebrew'],
 ];
@@ -169,6 +171,7 @@ function App() {
       ${tab === 'bestiary' ? html`<${Bestiary} app=${app} onOpen=${openEntry} />` : null}
       ${tab === 'monster' ? html`<${Editor} key=${work.monster.def.id} app=${app} mode="monster" def=${work.monster.def} setDef=${setDef('monster')} dirty=${isDirty('monster')} inLibrary=${inLibrary('monster')} onSave=${() => save('monster')} onSaveCopy=${() => save('monster', true)} onNew=${() => newEntry('monster')} />` : null}
       ${tab === 'npc' ? html`<${Editor} key=${work.npc.def.id} app=${app} mode="npc" def=${work.npc.def} setDef=${setDef('npc')} dirty=${isDirty('npc')} inLibrary=${inLibrary('npc')} onSave=${() => save('npc')} onSaveCopy=${() => save('npc', true)} onNew=${() => newEntry('npc')} />` : null}
+      ${tab === 'dungeons' ? html`<${Dungeons} app=${app} onOpenEntry=${openEntry} />` : null}
       ${tab === 'library' ? html`<${Library} app=${app} onOpen=${openEntry} />` : null}
       ${tab === 'homebrew' ? html`<${Homebrew} app=${app} />` : null}
     </${ErrorBoundary}></main>

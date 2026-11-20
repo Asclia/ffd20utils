@@ -11,7 +11,7 @@
     "app": "electron .",
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "node test/engine.test.mjs && node test/library.test.mjs",
+    "test": "node test/engine.test.mjs && node test/library.test.mjs && node test/dungeon.test.mjs",
     "build-data": "python3 tools/build_data.py",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"

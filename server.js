@@ -17,13 +17,14 @@ const PUBLIC = path.join(__dirname, 'public');
 //   settings.json (per-computer, e.g. the Obsidian vault path) and location.json.
 // DATA: the library (entries, images, folders, homebrew). By default the same as LOCAL; the user can
 //   point it to a folder synced by Koofr, Dropbox, MEGA… to share it between computers.
-let LOCAL, DATA, ENTRIES, IMAGES;
+let LOCAL, DATA, ENTRIES, IMAGES, DUNGEONS;
 let locationError = null; // configured library folder could not be used at startup
 function setDataDir(dir) {
   DATA = path.resolve(dir);
   ENTRIES = path.join(DATA, 'entries');
   IMAGES = path.join(DATA, 'images');
-  for (const d of [DATA, ENTRIES, IMAGES]) fs.mkdirSync(d, { recursive: true });
+  DUNGEONS = path.join(DATA, 'dungeons');
+  for (const d of [DATA, ENTRIES, IMAGES, DUNGEONS]) fs.mkdirSync(d, { recursive: true });
   watchLibrary();
 }
 
@@ -42,6 +43,7 @@ function watchLibrary() {
   const relevant = new Map([
     [DATA, (n) => n === 'folders.json' || n === 'homebrew.json'],
     [ENTRIES, (n) => n.endsWith('.json')],
+    [DUNGEONS, (n) => n.endsWith('.json')],
     [IMAGES, (n) => /\.(png|jpg|jpeg|gif|webp|avif|svg)$/i.test(n)],
   ]);
   for (const [dir, isRelevant] of relevant) {
@@ -122,6 +124,15 @@ async function mergeLibrary(from, to) {
     const cur = await readJSON(dest, null);
     if (!cur || (Number(src.updatedAt) || 0) > (Number(cur.updatedAt) || 0)) { await writeJSON(dest, src); copied++; }
   }
+  await fsp.mkdir(path.join(to, 'dungeons'), { recursive: true });
+  for (const f of await fsp.readdir(path.join(from, 'dungeons')).catch(() => [])) {
+    if (!f.endsWith('.json')) continue;
+    const src = await readJSON(path.join(from, 'dungeons', f), null);
+    if (!src?.id || !safeId(src.id)) continue;
+    const dest = path.join(to, 'dungeons', `${src.id}.json`);
+    const cur = await readJSON(dest, null);
+    if (!cur || (Number(src.updatedAt) || 0) > (Number(cur.updatedAt) || 0)) await writeJSON(dest, src);
+  }
   for (const f of await fsp.readdir(path.join(from, 'images')).catch(() => [])) {
     const dest = path.join(to, 'images', f);
     if (!fs.existsSync(dest)) { markOwn(dest); await fsp.copyFile(path.join(from, 'images', f), dest); }
@@ -171,6 +182,29 @@ async function api(req, res, url) {
     locationError = null;
     await writeJSON(path.join(LOCAL, 'location.json'), body.reset ? {} : { libraryDir: path.resolve(target) });
     return send(res, 200, { ok: true, dir: DATA, ...result });
+  }
+
+  // dungeons (maps + room keys)
+  if (p === '/api/dungeons' && method === 'GET') {
+    const out = [];
+    for (const f of (await fsp.readdir(DUNGEONS)).filter((x) => x.endsWith('.json'))) {
+      const d = await readJSON(path.join(DUNGEONS, f), null);
+      if (d?.id) out.push(d);
+    }
+    return send(res, 200, out);
+  }
+  let dm = p.match(/^\/api\/dungeons\/([^/]+)$/);
+  if (dm) {
+    const id = decodeURIComponent(dm[1]);
+    if (!safeId(id)) return send(res, 400, { error: 'bad id' });
+    const file = path.join(DUNGEONS, `${id}.json`);
+    if (method === 'PUT') {
+      const body = await json(req);
+      if (!body || body.id !== id) return send(res, 400, { error: 'id mismatch' });
+      await writeJSON(file, body);
+      return send(res, 200, { ok: true });
+    }
+    if (method === 'DELETE') { markOwn(file); await fsp.rm(file, { force: true }); return send(res, 200, { ok: true }); }
   }
 
   // entries
