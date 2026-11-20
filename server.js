@@ -32,16 +32,26 @@ let revision = 0;
 let watchers = [];
 let bumpTimer = null;
 const ownWrites = new Map(); // absolute path -> time of our own last write
-const markOwn = (file) => ownWrites.set(path.resolve(file), Date.now());
+const ownKey = (file) => (process.platform === 'win32' ? path.resolve(file).toLowerCase() : path.resolve(file));
+const markOwn = (file) => ownWrites.set(ownKey(file), Date.now());
 function watchLibrary() {
   for (const w of watchers) try { w.close(); } catch { /* ignore */ }
   watchers = [];
-  for (const dir of [DATA, ENTRIES, IMAGES]) {
+  // Each folder only reacts to the files that matter (on Windows a folder also reports changes of
+  // its subfolders, e.g. "entries", which must not count as an external change).
+  const relevant = new Map([
+    [DATA, (n) => n === 'folders.json' || n === 'homebrew.json'],
+    [ENTRIES, (n) => n.endsWith('.json')],
+    [IMAGES, (n) => /\.(png|jpg|jpeg|gif|webp|avif|svg)$/i.test(n)],
+  ]);
+  for (const [dir, isRelevant] of relevant) {
     try {
       watchers.push(fs.watch(dir, (ev, name) => {
-        if (!name || name.endsWith('.tmp') || name === 'location.json' || name === 'settings.json') return;
-        const full = path.join(dir, String(name));
-        if (Date.now() - (ownWrites.get(full) || 0) < 3000) return;
+        if (!name) return;
+        name = path.basename(String(name));
+        if (name.endsWith('.tmp') || !isRelevant(name)) return;
+        const full = path.join(dir, name);
+        if (Date.now() - (ownWrites.get(ownKey(full)) || 0) < 3000) return;
         clearTimeout(bumpTimer);
         bumpTimer = setTimeout(() => { revision++; }, 800);
       }));
