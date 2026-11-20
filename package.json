@@ -1,6 +1,6 @@
 {
   "name": "ffd20utils",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Criador de monstros e NPCs para Final Fantasy d20 (FFd20) com statblocks no formato Pathfinder 1e.",
   "type": "module",
   "private": true,
@@ -11,7 +11,7 @@
     "app": "electron .",
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "node test/engine.test.mjs",
+    "test": "node test/engine.test.mjs && node test/sync.test.mjs",
     "build-data": "python3 tools/build_data.py",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"
@@ -31,6 +31,7 @@
     },
     "files": [
       "server.js",
+      "sync.js",
       "desktop/**",
       "public/**",
       "package.json"

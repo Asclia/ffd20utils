@@ -63,6 +63,7 @@ function App() {
   const [folders, setFoldersState] = useState([]);
   const [homebrew, setHomebrewState] = useState({});
   const [settings, setSettingsState] = useState({});
+  const [syncStatus, setSyncStatus] = useState(null);
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('tab') || 'bestiary'; } catch { return 'bestiary'; } });
   const [work, setWork] = useState(() => ({
     monster: loadDraft('monster') || fresh('monster'),
@@ -83,12 +84,32 @@ function App() {
       }
     })();
   }, []);
+  // Google Drive sync: poll the local server's status; reload the library when a sync brought changes
+  useEffect(() => {
+    if (!store || store.kind !== 'server') return undefined;
+    let lastRev = null;
+    let alive = true;
+    const poll = async () => {
+      const st = await store.syncStatus().catch(() => null);
+      if (!alive || !st) return;
+      setSyncStatus(st);
+      if (lastRev !== null && st.revision !== lastRev) {
+        const [en, fo, hb] = await Promise.all([store.listEntries(), store.getDoc('folders', []), store.getDoc('homebrew', {})]);
+        setEntries((en || []).map(normalize)); setFoldersState(fo || []); setHomebrewState(hb || {});
+        toast('Biblioteca atualizada pelo Google Drive.');
+      }
+      lastRev = st.revision;
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [store]);
   useEffect(() => { try { localStorage.setItem('tab', tab); } catch { /* ignore */ } }, [tab]);
   useEffect(() => { saveDraft('monster', work.monster); }, [work.monster]);
   useEffect(() => { saveDraft('npc', work.npc); }, [work.npc]);
 
   const app = useMemo(() => ({
-    db, store, entries, folders, homebrew, settings,
+    db, store, entries, folders, homebrew, settings, syncStatus, setSyncStatus,
     async saveEntry(e, quiet) {
       const entry = { ...e, updatedAt: Date.now() };
       await store.saveEntry(entry);
@@ -103,7 +124,7 @@ function App() {
     async setFolders(f) { setFoldersState(f); await store.putDoc('folders', f); },
     async setHomebrew(h) { setHomebrewState(h); await store.putDoc('homebrew', h); },
     async setSettings(s) { setSettingsState(s); await store.putDoc('settings', s); },
-  }), [db, store, entries, folders, homebrew, settings]);
+  }), [db, store, entries, folders, homebrew, settings, syncStatus]);
 
   if (err) return html`<div class="fatal"><h1>Erro ao carregar</h1><p>${err}</p><p>Abra o programa pelo servidor local: <code>node server.js</code> e acesse http://localhost:7420</p></div>`;
   if (!db || !store) return html`<div class="loading">Carregando regras do FFd20…</div>`;
@@ -138,6 +159,9 @@ function App() {
     <header class="topbar">
       <div class="brand">FFd20 <span>Utils</span></div>
       <nav class="tabs">${TABS.map(([k, l]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${l}${(k === 'monster' || k === 'npc') && isDirty(k) ? html`<i class="dot">●</i>` : null}</button>`)}</nav>
+      ${syncStatus?.connected ? html`<button class="sync-pill ${syncStatus.state}" title=${syncStatus.error || `Google Drive${syncStatus.account ? ` (${syncStatus.account})` : ''} — clique para sincronizar agora`}
+        onClick=${async () => { try { await store.syncCall('now'); setSyncStatus(await store.syncStatus()); toast('Sincronizado com o Google Drive.'); } catch (e) { toast(e.message, 'error'); } }}>
+        ${syncStatus.state === 'syncing' ? '☁ sincronizando…' : syncStatus.state === 'error' ? '☁ erro no sync' : `☁ ${syncStatus.lastSync ? new Date(syncStatus.lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Drive'}`}</button>` : null}
       <div class="store-kind" title=${store.kind === 'server' ? 'Salvando em arquivos locais' : 'Salvando no navegador'}>${store.kind === 'server' ? '💾 local' : '🌐 navegador'}</div>
     </header>
     <main><${ErrorBoundary} key=${tab}>

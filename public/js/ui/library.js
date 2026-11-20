@@ -149,6 +149,7 @@ export function Library({ app, onOpen }) {
           </div>
         </div>
         <${Settings} app=${app} />
+        ${app.store.kind === 'server' ? html`<${SyncPanel} app=${app} />` : null}
       </div>
     </div>
     ${view ? html`<${Viewer} app=${app} entry=${view} onClose=${() => setView(null)} onOpen=${onOpen} />` : null}
@@ -167,5 +168,64 @@ function Settings({ app }) {
       <${Check} label="Manter a estrutura de pastas da biblioteca ao enviar ao vault" checked=${s.keepFolders} onChange=${(v) => setS({ ...s, keepFolders: v })} />
       <${Check} label="O botão 'Exportar .md' grava direto no vault" checked=${s.preferVault} onChange=${(v) => setS({ ...s, preferVault: v })} />
       <div class="row"><button class="btn primary small" onClick=${async () => { await app.setSettings(s); toast('Configurações salvas.'); }}>Salvar configurações</button></div>` : null}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ Google Drive sync
+function SyncPanel({ app }) {
+  const st = app.syncStatus;
+  const [cid, setCid] = useState('');
+  const [secret, setSecret] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const refresh = async () => app.setSyncStatus(await app.store.syncStatus());
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try { await fn(); if (ok) toast(ok); } catch (e) { toast(e.message, 'error'); }
+    setBusy(false);
+    refresh();
+  };
+  const connect = () => run(async () => {
+    const { url } = await app.store.syncCall('connect');
+    window.open(url, '_blank');
+    toast('Faça o login no navegador que abriu e volte aqui.');
+  });
+  if (!st) return null;
+  const showForm = !st.configured || showSetup;
+  return html`<div class="panel sync-panel">
+    <h4>Sincronização com Google Drive</h4>
+    ${st.connected ? html`
+      <p>✅ Conectado${st.account ? html` como <b>${st.account}</b>` : ''}. A biblioteca (statblocks, pastas, homebrew e imagens) fica na pasta <b>FFd20 Utils</b> do seu Drive.</p>
+      <p class="small ${st.state === 'error' ? 'warn' : 'muted'}">${st.state === 'syncing' ? 'Sincronizando…' : st.state === 'error' ? `Erro: ${st.error}` : st.lastSync ? `Última sincronização: ${new Date(st.lastSync).toLocaleString('pt-BR')}` : 'Ainda não sincronizado.'}
+        ${st.lastResult && st.state !== 'error' ? ` · ${st.lastResult.uploaded} enviado(s), ${st.lastResult.downloaded} recebido(s)${st.lastResult.conflicts ? `, ${st.lastResult.conflicts} conflito(s) salvos como cópia` : ''}` : ''}</p>
+      <div class="row wrap">
+        <button class="btn primary small" disabled=${busy} onClick=${() => run(() => app.store.syncCall('now'), 'Sincronizado.')}>Sincronizar agora</button>
+        <${Check} label="Sincronizar automaticamente" checked=${st.auto} onChange=${(v) => run(() => app.store.syncCall('config', { auto: v }))} />
+        <button class="btn small ghost" onClick=${() => run(async () => { await navigator.clipboard.writeText(await app.store.syncSetupCode()); }, 'Código de configuração copiado. Cole-o nos outros computadores.')}>Copiar código para outro PC</button>
+        <button class="btn small danger" disabled=${busy} onClick=${() => confirm('Desconectar deste Google Drive? Os arquivos locais e os do Drive continuam onde estão.') && run(() => app.store.syncCall('disconnect'), 'Desconectado.')}>Desconectar</button>
+      </div>` : html`
+      <p class="small muted">Mantém a mesma biblioteca em todos os seus computadores usando o seu Google Drive (gratuito). O programa só acessa os arquivos que ele mesmo cria.</p>
+      ${st.configured && !showForm ? html`
+        <div class="row wrap"><button class="btn primary" disabled=${busy} onClick=${connect}>Conectar ao Google Drive</button>
+        <button class="btn small ghost" onClick=${() => setShowSetup(true)}>trocar credenciais</button></div>` : null}`}
+    ${showForm && !st.connected ? html`
+      <details class="traits" open=${!st.configured}><summary>Primeira vez? Como obter as credenciais (uma vez só, ~5 min)</summary>
+        <ol class="small">
+          <li>Abra <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a> e crie um projeto (ex.: "FFd20 Utils").</li>
+          <li>Ative a <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Drive API</a> nesse projeto.</li>
+          <li>Em <b>Google Auth Platform</b> (antiga "Tela de consentimento OAuth"): tipo <b>Externo</b>, nome do app e seu e-mail. Em <b>Público-alvo</b>, clique em <b>Publicar app</b> (sem isso o login expira a cada 7 dias).</li>
+          <li>Em <b>Clientes</b> (ou Credenciais → Criar credenciais → ID do cliente OAuth), escolha o tipo <b>App para computador</b> e crie.</li>
+          <li>Copie o <b>ID do cliente</b> e a <b>Chave secreta do cliente</b> e cole abaixo.</li>
+        </ol>
+        <p class="small muted">No login, o Google pode avisar que o app não foi verificado: é o seu próprio app; clique em <i>Avançado → Acessar</i>. Detalhes no README.</p>
+      </details>
+      <${Field} label="ID do cliente (Client ID)" wide><${Text} value=${cid} placeholder="123456-abc.apps.googleusercontent.com" onInput=${setCid} /></${Field}>
+      <${Field} label="Chave secreta do cliente (Client Secret)" wide><${Text} value=${secret} placeholder="GOCSPX-…" onInput=${setSecret} /></${Field}>
+      <div class="row wrap">
+        <button class="btn primary small" disabled=${busy || !cid.trim() || !secret.trim()} onClick=${() => run(async () => { await app.store.syncCall('config', { clientId: cid, clientSecret: secret }); setShowSetup(false); }, 'Credenciais salvas. Agora clique em "Conectar ao Google Drive".')}>Salvar credenciais</button>
+      </div>
+      <${Field} label="…ou cole o código de configuração copiado de outro PC" wide><${Text} value=${code} placeholder="ffd20:…" onInput=${setCode} /></${Field}>
+      <div class="row"><button class="btn small" disabled=${busy || !code.trim()} onClick=${() => run(async () => { await app.store.syncCall('config', { setupCode: code }); setCode(''); setShowSetup(false); }, 'Credenciais importadas. Agora clique em "Conectar ao Google Drive".')}>Usar código</button></div>` : null}
   </div>`;
 }

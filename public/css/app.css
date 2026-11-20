@@ -282,3 +282,11 @@ main { flex: 1; padding: 16px 18px; }
 .talent-row { border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent); padding: 4px 0; }
 .arch-row { margin-left: 12px; }
 .cf-row.replaced { opacity: .6; }
+
+/* ---------- sync */
+.sync-pill { margin-left: auto; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); border-radius: 12px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.sync-pill.ok { color: var(--ok); }
+.sync-pill.error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
+.sync-pill + .store-kind { margin-left: 8px; }
+.sync-panel ol { padding-left: 18px; }
+.sync-panel ol li { margin: 3px 0; }

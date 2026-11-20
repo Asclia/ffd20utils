@@ -1,6 +1,6 @@
 // FFd20 Utils — desktop app (Electron). Starts the same local server used by the web
 // version in the background and shows the app in its own window.
-import { app, BrowserWindow, shell, Menu, dialog } from 'electron';
+import { app, BrowserWindow, shell, Menu, dialog, net } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +21,9 @@ async function start() {
   try {
     const { startServer } = await import('../server.js');
     // Fixed preferred port so the app keeps its browser-side preferences between launches.
-    const { url } = await startServer({ dataDir: path.join(app.getPath('userData'), 'biblioteca'), port: 47420 });
+    // net.fetch uses Chromium's network stack (system proxy settings), for Google Drive sync
+    const { url, sync } = await startServer({ dataDir: path.join(app.getPath('userData'), 'biblioteca'), port: 47420, fetch: (...a) => net.fetch(...a) });
+    app.on('before-quit', () => sync.stop());
     Menu.setApplicationMenu(null);
     win = new BrowserWindow({
       width: 1440, height: 920, minWidth: 900, minHeight: 600,

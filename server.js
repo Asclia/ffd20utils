@@ -10,11 +10,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { exec } from 'node:child_process';
+import { DriveSync, encodeSetup, decodeSetup } from './sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
 // Data folder; set by startServer() (desktop app: the OS app-data folder; CLI: ./userdata).
 let DATA, ENTRIES, IMAGES;
+let sync = null;          // Google Drive sync (sync.js)
+let fetchImpl = globalThis.fetch;
+let serverOrigin = '';
 function setDataDir(dir) {
   DATA = path.resolve(dir);
   ENTRIES = path.join(DATA, 'entries');
@@ -94,10 +98,12 @@ async function api(req, res, url) {
       const body = await json(req);
       if (!body || body.id !== id) return send(res, 400, { error: 'id mismatch' });
       await writeJSON(file, body);
+      sync?.markDirty();
       return send(res, 200, { ok: true });
     }
     if (method === 'DELETE') {
       await fsp.rm(file, { force: true });
+      await sync?.recordDelete(id);
       return send(res, 200, { ok: true });
     }
   }
@@ -107,7 +113,11 @@ async function api(req, res, url) {
     const file = path.join(DATA, `${m[1]}.json`);
     const fallback = m[1] === 'folders' ? [] : {};
     if (method === 'GET') return send(res, 200, await readJSON(file, fallback));
-    if (method === 'PUT') { await writeJSON(file, await json(req)); return send(res, 200, { ok: true }); }
+    if (method === 'PUT') {
+      await writeJSON(file, await json(req));
+      if (m[1] !== 'settings') await sync?.recordDocChange(m[1]);
+      return send(res, 200, { ok: true });
+    }
   }
   // image upload: raw body with Content-Type image/*
   if (p === '/api/images' && method === 'POST') {
@@ -118,6 +128,7 @@ async function api(req, res, url) {
     const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
     const name = `${hash}${ext}`;
     await fsp.writeFile(path.join(IMAGES, name), buf);
+    sync?.markDirty();
     return send(res, 200, { url: `/userdata/images/${name}`, name });
   }
   // export markdown (+ local image) into a folder on disk, e.g. an Obsidian vault
@@ -143,6 +154,34 @@ async function api(req, res, url) {
     }
     return send(res, 200, { ok: true, dir: sub, written });
   }
+  // Google Drive sync
+  if (p === '/api/sync/status' && method === 'GET') return send(res, 200, await sync.status());
+  if (p === '/api/sync/config' && method === 'PUT') {
+    const b = await json(req);
+    const patch = {};
+    if (typeof b.setupCode === 'string' && b.setupCode.trim()) {
+      const dec = decodeSetup(b.setupCode);
+      if (!dec) return send(res, 400, { error: 'Código de configuração inválido.' });
+      Object.assign(patch, dec);
+    }
+    if (typeof b.clientId === 'string') patch.clientId = b.clientId.trim();
+    if (typeof b.clientSecret === 'string' && b.clientSecret.trim()) patch.clientSecret = b.clientSecret.trim();
+    if (typeof b.auto === 'boolean') patch.auto = b.auto;
+    await sync.setConfig(patch);
+    return send(res, 200, await sync.status());
+  }
+  if (p === '/api/sync/setup-code' && method === 'GET') {
+    const cfg = await sync.config();
+    return send(res, 200, { code: cfg.clientId && cfg.clientSecret ? encodeSetup(cfg.clientId, cfg.clientSecret) : '' });
+  }
+  if (p === '/api/sync/connect' && method === 'POST') {
+    try { return send(res, 200, { url: await sync.authUrl(`${serverOrigin}/oauth/callback`) }); } catch (e) { return send(res, 400, { error: e.message }); }
+  }
+  if (p === '/api/sync/now' && method === 'POST') {
+    try { return send(res, 200, { ok: true, result: await sync.sync() }); } catch (e) { return send(res, 502, { error: e.message }); }
+  }
+  if (p === '/api/sync/disconnect' && method === 'POST') { await sync.disconnect(); return send(res, 200, await sync.status()); }
+
   // full backup
   if (p === '/api/backup' && method === 'GET') {
     const entries = await listEntries();
@@ -169,6 +208,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    if (url.pathname === '/oauth/callback') {
+      let msg;
+      try {
+        const email = await sync.handleCallback(url.searchParams);
+        msg = `<h1>Conectado ao Google Drive ✓</h1><p>${email ? `Conta: ${escapeHtml(email)}. ` : ''}Pode fechar esta aba e voltar ao FFd20 Utils.</p>`;
+      } catch (e) {
+        msg = `<h1>Não foi possível conectar</h1><p>${escapeHtml(e.message)}</p>`;
+      }
+      return send(res, 200, `<!doctype html><meta charset="utf-8"><title>FFd20 Utils</title><body style="font-family:system-ui;background:#0f1420;color:#e6ebf5;text-align:center;padding:60px">${msg}</body>`, 'text/html; charset=utf-8');
+    }
     let base = PUBLIC;
     let rel = decodeURIComponent(url.pathname);
     if (rel.startsWith('/userdata/images/')) { base = IMAGES; rel = rel.slice('/userdata/images/'.length); }
@@ -181,8 +230,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Starts the server. Tries `port` first and falls back to any free port if it is taken.
-export function startServer({ dataDir, port = 7420, host = '127.0.0.1' } = {}) {
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// fetch: optional fetch implementation (the desktop app passes Electron's net.fetch, which
+// follows the system proxy settings — useful on work networks).
+export function startServer({ dataDir, port = 7420, host = '127.0.0.1', fetch: customFetch } = {}) {
   setDataDir(dataDir || path.join(__dirname, 'userdata'));
+  if (customFetch) fetchImpl = customFetch;
+  // FFD20_SYNC_ENDPOINTS (JSON) points the Google URLs at a local fake — used only by tests
+  let endpoints = {};
+  try { endpoints = process.env.FFD20_SYNC_ENDPOINTS ? JSON.parse(process.env.FFD20_SYNC_ENDPOINTS) : {}; } catch { /* ignore */ }
+  sync = new DriveSync({ dataDir: DATA, fetch: (...a) => fetchImpl(...a), endpoints });
   const listen = (p) => new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(p, host, () => { server.off('error', reject); resolve(server.address().port); });
@@ -190,7 +248,11 @@ export function startServer({ dataDir, port = 7420, host = '127.0.0.1' } = {}) {
   return listen(port).catch((e) => {
     if (e.code !== 'EADDRINUSE') throw e;
     return listen(0);
-  }).then((p) => ({ server, url: `http://${host === '0.0.0.0' ? 'localhost' : host}:${p}`, dataDir: DATA }));
+  }).then((p) => {
+    serverOrigin = `http://${host === '0.0.0.0' || host === 'localhost' ? '127.0.0.1' : host}:${p}`;
+    sync.startAuto();
+    return { server, url: `http://${host === '0.0.0.0' ? 'localhost' : host}:${p}`, dataDir: DATA, sync };
+  });
 }
 
 // Command-line use: node server.js [--open]
