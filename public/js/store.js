@@ -21,15 +21,6 @@ class ServerStore {
     return j;
   }
   async _ok(p) { const r = await p; if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; }
-  // Google Drive sync (handled by the local server, see sync.js)
-  async syncStatus() { const r = await fetch('/api/sync/status', { cache: 'no-store' }); return r.ok ? r.json() : null; }
-  async syncCall(action, body) {
-    const r = await fetch(`/api/sync/${action}`, { method: action === 'config' ? 'PUT' : 'POST', headers: H, body: JSON.stringify(body || {}) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-    return j;
-  }
-  async syncSetupCode() { return (await (await fetch('/api/sync/setup-code', { cache: 'no-store' })).json()).code; }
 }
 
 class BrowserStore {

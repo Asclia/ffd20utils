@@ -61,34 +61,6 @@ programa não apaga a biblioteca.
 Cada statblock tem um espaço para imagem: cole um **link (URL)** ou use um **arquivo local**
 (botão, arrastar e soltar ou Ctrl+V). Arquivos locais são copiados para a pasta `images` da biblioteca.
 
-## Sincronizar entre computadores (Google Drive)
-
-O programa pode manter a mesma biblioteca em todos os seus PCs (Windows e Linux) usando o seu Google Drive.
-É gratuito: usa o espaço da sua conta Google, e a biblioteca ocupa pouquíssimo.
-
-- O programa só tem acesso aos arquivos que ele mesmo cria (permissão `drive.file`), numa pasta **FFd20 Utils** do seu Drive. O resto do seu Drive fica inacessível para ele.
-- Sincroniza ao abrir, alguns segundos depois de cada alteração e a cada 3 minutos (ou pelo botão ☁ no topo).
-- Se a mesma criatura for editada em dois PCs antes de sincronizar, a versão mais nova fica e a outra é guardada como cópia **"(conflito de sync)"**. Exclusões são levadas para os outros PCs.
-- No app de desktop, a conexão usa as configurações de rede/proxy do sistema (útil em redes de empresa).
-
-### Configuração (uma vez, ~5 minutos)
-
-O Google exige que cada programa tenha uma "chave de login". Como este é um app pessoal, você cria a sua, de graça:
-
-1. Abra o [Google Cloud Console](https://console.cloud.google.com/projectcreate) com a sua conta Google e crie um projeto (ex.: "FFd20 Utils"). Não precisa de cartão de crédito.
-2. Ative a [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com) nesse projeto.
-3. Abra **Google Auth Platform** (em versões antigas do console: *APIs e serviços → Tela de consentimento OAuth*):
-   - tipo de usuário **Externo**, nome do app (ex.: FFd20 Utils) e o seu e-mail;
-   - em **Público-alvo**, clique em **Publicar app** (status "Em produção"). *Importante:* em modo de teste o Google desconecta o app a cada 7 dias. Como o app só usa a permissão `drive.file`, publicar não exige verificação.
-4. Em **Clientes** (ou *Credenciais → Criar credenciais → ID do cliente OAuth*), escolha o tipo **App para computador** e crie.
-5. Copie o **ID do cliente** e a **Chave secreta do cliente**.
-6. No FFd20 Utils: **Biblioteca → Sincronização com Google Drive** → cole os dois → **Salvar credenciais** → **Conectar ao Google Drive**. O login abre no seu navegador; ao terminar, pode fechar a aba.
-
-Nos outros PCs: no PC já configurado, clique em **Copiar código para outro PC**; no PC novo, cole o código no campo *"…ou cole o código de configuração"* → **Usar código** → **Conectar ao Google Drive**.
-Se o PC novo já tinha statblocks, pastas ou homebrew, eles são juntados aos do Drive (nada é apagado).
-
-> No login, o Google pode mostrar "O Google não verificou este app". É o seu próprio app: clique em **Avançado → Acessar FFd20 Utils (não seguro)** e permita o acesso.
-
 ## Exportar para o Obsidian
 
 - **Exportar .md:** baixa o Markdown (com *frontmatter* YAML: nome, CR, tipo, subtipos, tags). Se a imagem for um arquivo local, baixa um `.zip` com o `.md` e a imagem em `attachments/`.
