@@ -1,6 +1,6 @@
 // FFd20 Utils — desktop app (Electron). Starts the same local server used by the web
 // version in the background and shows the app in its own window.
-import { app, BrowserWindow, shell, Menu, dialog } from 'electron';
+import { app, BrowserWindow, shell, Menu, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +27,12 @@ async function start() {
       width: 1440, height: 920, minWidth: 900, minHeight: 600,
       title: 'FFd20 Utils', backgroundColor: '#0f1420', show: false,
       icon: path.join(__dirname, 'icon.png'),
-      webPreferences: { contextIsolation: true, sandbox: true },
+      webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
+    });
+    // native folder picker for the library folder / Obsidian vault
+    ipcMain.handle('pick-folder', async (e, title) => {
+      const r = await dialog.showOpenDialog(win, { title: title || 'Escolher pasta', properties: ['openDirectory', 'createDirectory'] });
+      return r.canceled ? null : r.filePaths[0];
     });
     win.once('ready-to-show', () => { win.maximize(); win.show(); });
     // Links to other sites open in the normal browser.

@@ -1,4 +1,4 @@
-import { html, useState, useRef } from '../../vendor/ui.mjs';
+import { html, useState, useRef, useEffect } from '../../vendor/ui.mjs';
 import { Field, Text, Check, toast, askText } from './components.js';
 import { uid } from '../rules/engine.js';
 import { crLabel } from '../rules/tables.js';
@@ -148,6 +148,7 @@ export function Library({ app, onOpen }) {
             <input ref=${fileRef} type="file" accept=".json,application/json" style="display:none" onChange=${(e) => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; }} />
           </div>
         </div>
+        ${app.store.kind === 'server' ? html`<${LibraryFolder} app=${app} />` : null}
         <${Settings} app=${app} />
       </div>
     </div>
@@ -160,12 +161,53 @@ function Settings({ app }) {
   const server = app.store.kind === 'server';
   return html`<div class="panel">
     <h4>Configurações</h4>
-    <p class="muted small">Armazenamento: ${server ? html`<b>arquivos locais</b> em <code>${app.store.dataDir || 'userdata/'}</code>` : html`<b>navegador</b> (IndexedDB). Rode <code>node server.js</code> para salvar em arquivos.`}</p>
+    ${server ? null : html`<p class="muted small">Armazenamento: <b>navegador</b> (IndexedDB). Rode <code>node server.js</code> para salvar em arquivos.</p>`}
     ${server ? html`
-      <${Field} label="Pasta de exportação (ex.: seu vault do Obsidian)" wide><${Text} value=${s.exportDir || ''} placeholder=${'C:\\Users\\voce\\Obsidian\\Bestiario  ou  /home/voce/Obsidian/Bestiario'} onInput=${(v) => setS({ ...s, exportDir: v })} /></${Field}>
+      <${Field} label="Pasta de exportação (ex.: seu vault do Obsidian) — vale só para este computador" wide>
+        <div class="row"><${Text} value=${s.exportDir || ''} placeholder=${'C:\\Users\\voce\\Obsidian\\Bestiario  ou  /home/voce/Obsidian/Bestiario'} onInput=${(v) => setS({ ...s, exportDir: v })} />
+        ${window.ffd20Desktop ? html`<button class="btn small" onClick=${async () => { const d = await window.ffd20Desktop.pickFolder('Pasta do vault do Obsidian'); if (d) setS({ ...s, exportDir: d }); }}>Escolher…</button>` : null}</div></${Field}>
       <${Field} label="Subpasta de imagens"><${Text} value=${s.attachmentsFolder || ''} placeholder="attachments" onInput=${(v) => setS({ ...s, attachmentsFolder: v })} /></${Field}>
       <${Check} label="Manter a estrutura de pastas da biblioteca ao enviar ao vault" checked=${s.keepFolders} onChange=${(v) => setS({ ...s, keepFolders: v })} />
       <${Check} label="O botão 'Exportar .md' grava direto no vault" checked=${s.preferVault} onChange=${(v) => setS({ ...s, preferVault: v })} />
       <div class="row"><button class="btn primary small" onClick=${async () => { await app.setSettings(s); toast('Configurações salvas.'); }}>Salvar configurações</button></div>` : null}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ library folder (Koofr, Dropbox, MEGA…)
+function LibraryFolder({ app }) {
+  const [info, setInfo] = useState(null);
+  const [dir, setDir] = useState('');
+  const [copy, setCopy] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { fetch('/api/library', { cache: 'no-store' }).then((r) => r.json()).then(setInfo).catch(() => {}); }, []);
+  const apply = async (body, okMsg) => {
+    setBusy(true);
+    try {
+      const r = await fetch('/api/library/location', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-FFd20': '1' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      toast(okMsg + (j.copied ? ` ${j.copied} statblock(s) copiado(s).` : ''));
+      setTimeout(() => location.reload(), 900);
+    } catch (e) { toast(e.message, 'error'); setBusy(false); }
+  };
+  const pick = async () => {
+    const d = window.ffd20Desktop ? await window.ffd20Desktop.pickFolder('Pasta da biblioteca (ex.: dentro do Koofr)') : null;
+    if (d) setDir(d);
+  };
+  if (!info) return null;
+  return html`<div class="panel">
+    <h4>Pasta da biblioteca</h4>
+    ${info.error ? html`<p class="small warn">⚠ ${info.error}</p>` : null}
+    <p class="small">A biblioteca (statblocks, pastas, homebrew e imagens) está em:<br /><code>${info.dir}</code>${info.custom ? '' : html` <span class="muted">(pasta padrão)</span>`}</p>
+    <p class="small muted">Para usar a mesma biblioteca em vários computadores, escolha uma pasta sincronizada pelo <b>Koofr</b> (ou Dropbox, MEGA, OneDrive…) e faça o mesmo nos outros PCs. Use um computador por vez e espere o app de sincronização terminar antes de abrir o programa no outro.</p>
+    <div class="row wrap">
+      <input type="text" style="flex:1;min-width:220px" placeholder=${'ex.: C:\\Users\\voce\\Koofr\\FFd20  ou  /home/voce/Koofr/FFd20'} value=${dir} onInput=${(e) => setDir(e.target.value)} />
+      ${window.ffd20Desktop ? html`<button class="btn small" onClick=${pick}>Escolher pasta…</button>` : null}
+    </div>
+    <${Check} label="Copiar a biblioteca atual para a nova pasta (junta com o que já existir lá; nada é apagado)" checked=${copy} onChange=${setCopy} />
+    <div class="row wrap">
+      <button class="btn primary small" disabled=${busy || !dir.trim()} onClick=${() => apply({ dir: dir.trim(), copy }, 'Biblioteca movida para a nova pasta.')}>Usar esta pasta</button>
+      ${info.custom ? html`<button class="btn small ghost" disabled=${busy} onClick=${() => confirm('Voltar a usar a pasta padrão deste computador? (A pasta sincronizada continua intacta.)') && apply({ reset: true, copy }, 'Voltando para a pasta padrão.')}>Voltar para a pasta padrão</button>` : null}
+    </div>
   </div>`;
 }

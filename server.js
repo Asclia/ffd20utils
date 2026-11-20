@@ -13,13 +13,40 @@ import { exec } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
-// Data folder; set by startServer() (desktop app: the OS app-data folder; CLI: ./userdata).
-let DATA, ENTRIES, IMAGES;
+// LOCAL: this computer's own folder (desktop app: OS app-data folder; CLI: ./userdata). It keeps
+//   settings.json (per-computer, e.g. the Obsidian vault path) and location.json.
+// DATA: the library (entries, images, folders, homebrew). By default the same as LOCAL; the user can
+//   point it to a folder synced by Koofr, Dropbox, MEGA… to share it between computers.
+let LOCAL, DATA, ENTRIES, IMAGES;
+let locationError = null; // configured library folder could not be used at startup
 function setDataDir(dir) {
   DATA = path.resolve(dir);
   ENTRIES = path.join(DATA, 'entries');
   IMAGES = path.join(DATA, 'images');
   for (const d of [DATA, ENTRIES, IMAGES]) fs.mkdirSync(d, { recursive: true });
+  watchLibrary();
+}
+
+// ---- external changes (a sync app writing into the library folder) -> revision counter
+let revision = 0;
+let watchers = [];
+let bumpTimer = null;
+const ownWrites = new Map(); // absolute path -> time of our own last write
+const markOwn = (file) => ownWrites.set(path.resolve(file), Date.now());
+function watchLibrary() {
+  for (const w of watchers) try { w.close(); } catch { /* ignore */ }
+  watchers = [];
+  for (const dir of [DATA, ENTRIES, IMAGES]) {
+    try {
+      watchers.push(fs.watch(dir, (ev, name) => {
+        if (!name || name.endsWith('.tmp') || name === 'location.json' || name === 'settings.json') return;
+        const full = path.join(dir, String(name));
+        if (Date.now() - (ownWrites.get(full) || 0) < 3000) return;
+        clearTimeout(bumpTimer);
+        bumpTimer = setTimeout(() => { revision++; }, 800);
+      }));
+    } catch { /* watching is best effort */ }
+  }
 }
 
 const MIME = {
@@ -35,6 +62,7 @@ const readJSON = async (file, fallback) => {
   try { return JSON.parse(await fsp.readFile(file, 'utf8')); } catch { return fallback; }
 };
 const writeJSON = async (file, obj) => {
+  markOwn(file);
   const tmp = `${file}.${process.pid}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(obj, null, 2));
   await fsp.rename(tmp, file);
@@ -59,12 +87,46 @@ const json = async (req) => JSON.parse((await readBody(req)).toString('utf8') ||
 
 async function listEntries() {
   const files = (await fsp.readdir(ENTRIES)).filter((f) => f.endsWith('.json'));
-  const out = [];
+  // sync apps may leave "conflicted copy" files with the same id: keep the newest one
+  const byId = new Map();
   for (const f of files) {
     const e = await readJSON(path.join(ENTRIES, f), null);
-    if (e) out.push(e);
+    if (!e || !e.id) continue;
+    const prev = byId.get(e.id);
+    if (!prev || (Number(e.updatedAt) || 0) > (Number(prev.updatedAt) || 0)) byId.set(e.id, e);
   }
-  return out;
+  return [...byId.values()];
+}
+
+// Copies a library into another folder without losing anything: stat blocks keep the newest
+// version, images are copied when missing, folders and homebrew are joined by id.
+async function mergeLibrary(from, to) {
+  if (path.resolve(from) === path.resolve(to)) return { copied: 0 };
+  for (const d of ['entries', 'images']) await fsp.mkdir(path.join(to, d), { recursive: true });
+  let copied = 0;
+  for (const f of await fsp.readdir(path.join(from, 'entries')).catch(() => [])) {
+    if (!f.endsWith('.json')) continue;
+    const src = await readJSON(path.join(from, 'entries', f), null);
+    if (!src?.id || !safeId(src.id)) continue;
+    const dest = path.join(to, 'entries', `${src.id}.json`);
+    const cur = await readJSON(dest, null);
+    if (!cur || (Number(src.updatedAt) || 0) > (Number(cur.updatedAt) || 0)) { await writeJSON(dest, src); copied++; }
+  }
+  for (const f of await fsp.readdir(path.join(from, 'images')).catch(() => [])) {
+    const dest = path.join(to, 'images', f);
+    if (!fs.existsSync(dest)) { markOwn(dest); await fsp.copyFile(path.join(from, 'images', f), dest); }
+  }
+  const byId = (list) => new Map((Array.isArray(list) ? list : []).filter((x) => x && x.id).map((x) => [x.id, x]));
+  const folders = [...new Map([...byId(await readJSON(path.join(from, 'folders.json'), [])), ...byId(await readJSON(path.join(to, 'folders.json'), []))]).values()];
+  if (folders.length) await writeJSON(path.join(to, 'folders.json'), folders);
+  const hbFrom = await readJSON(path.join(from, 'homebrew.json'), {});
+  const hbTo = await readJSON(path.join(to, 'homebrew.json'), {});
+  const hb = { ...hbFrom, ...hbTo };
+  for (const k of new Set([...Object.keys(hbFrom), ...Object.keys(hbTo)])) {
+    if (Array.isArray(hbFrom[k]) || Array.isArray(hbTo[k])) hb[k] = [...new Map([...byId(hbFrom[k]), ...byId(hbTo[k])]).values()];
+  }
+  if (Object.keys(hb).length) await writeJSON(path.join(to, 'homebrew.json'), hb);
+  return { copied };
 }
 
 function sanitizeFileName(name) {
@@ -78,6 +140,28 @@ async function api(req, res, url) {
   // origin (cross-site pages would need a CORS preflight, which this server never grants).
   if (method !== 'GET' && req.headers['x-ffd20'] !== '1') return send(res, 403, { error: 'missing X-FFd20 header' });
   if (p === '/api/ping') return send(res, 200, { ok: true, data: DATA });
+
+  // library folder (e.g. a Koofr / Dropbox / MEGA synced folder)
+  if (p === '/api/library' && method === 'GET') return send(res, 200, { dir: DATA, defaultDir: LOCAL, custom: path.resolve(DATA) !== path.resolve(LOCAL), revision, error: locationError });
+  if (p === '/api/library/revision' && method === 'GET') return send(res, 200, { revision });
+  if (p === '/api/library/location' && method === 'POST') {
+    const body = await json(req);
+    const target = body.reset ? LOCAL : String(body.dir || '').trim();
+    if (!target || !path.isAbsolute(target)) return send(res, 400, { error: 'Informe o caminho completo de uma pasta.' });
+    try {
+      await fsp.mkdir(target, { recursive: true });
+      const probe = path.join(target, `.ffd20-test-${process.pid}`);
+      await fsp.writeFile(probe, 'ok');
+      await fsp.rm(probe, { force: true });
+    } catch (e) {
+      return send(res, 400, { error: `Não consegui usar essa pasta: ${e.message}` });
+    }
+    const result = body.copy ? await mergeLibrary(DATA, target) : { copied: 0 };
+    setDataDir(target);
+    locationError = null;
+    await writeJSON(path.join(LOCAL, 'location.json'), body.reset ? {} : { libraryDir: path.resolve(target) });
+    return send(res, 200, { ok: true, dir: DATA, ...result });
+  }
 
   // entries
   if (p === '/api/entries' && method === 'GET') return send(res, 200, await listEntries());
@@ -97,6 +181,7 @@ async function api(req, res, url) {
       return send(res, 200, { ok: true });
     }
     if (method === 'DELETE') {
+      markOwn(file);
       await fsp.rm(file, { force: true });
       return send(res, 200, { ok: true });
     }
@@ -104,7 +189,8 @@ async function api(req, res, url) {
   // simple JSON documents: folders, homebrew, settings
   m = p.match(/^\/api\/(folders|homebrew|settings)$/);
   if (m) {
-    const file = path.join(DATA, `${m[1]}.json`);
+    // settings belong to this computer (vault path etc.), the rest to the (possibly shared) library
+    const file = path.join(m[1] === 'settings' ? LOCAL : DATA, `${m[1]}.json`);
     const fallback = m[1] === 'folders' ? [] : {};
     if (method === 'GET') return send(res, 200, await readJSON(file, fallback));
     if (method === 'PUT') { await writeJSON(file, await json(req)); return send(res, 200, { ok: true }); }
@@ -117,13 +203,14 @@ async function api(req, res, url) {
     const buf = await readBody(req);
     const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
     const name = `${hash}${ext}`;
+    markOwn(path.join(IMAGES, name));
     await fsp.writeFile(path.join(IMAGES, name), buf);
     return send(res, 200, { url: `/userdata/images/${name}`, name });
   }
   // export markdown (+ local image) into a folder on disk, e.g. an Obsidian vault
   if (p === '/api/export' && method === 'POST') {
     const body = await json(req);
-    const settings = await readJSON(path.join(DATA, 'settings.json'), {});
+    const settings = await readJSON(path.join(LOCAL, 'settings.json'), {});
     const dir = path.resolve(body.dir || settings.exportDir || path.join(DATA, 'export'));
     const sub = body.subfolder ? path.join(dir, ...String(body.subfolder).split('/').map(sanitizeFileName)) : dir;
     await fsp.mkdir(sub, { recursive: true });
@@ -182,7 +269,16 @@ const server = http.createServer(async (req, res) => {
 
 // Starts the server. Tries `port` first and falls back to any free port if it is taken.
 export function startServer({ dataDir, port = 7420, host = '127.0.0.1' } = {}) {
-  setDataDir(dataDir || path.join(__dirname, 'userdata'));
+  LOCAL = path.resolve(dataDir || path.join(__dirname, 'userdata'));
+  fs.mkdirSync(LOCAL, { recursive: true });
+  let libraryDir = LOCAL;
+  try {
+    const loc = JSON.parse(fs.readFileSync(path.join(LOCAL, 'location.json'), 'utf8'));
+    if (loc.libraryDir) {
+      try { fs.mkdirSync(loc.libraryDir, { recursive: true }); libraryDir = loc.libraryDir; } catch (e) { locationError = `A pasta da biblioteca (${loc.libraryDir}) não está acessível: ${e.message}. Usando a pasta padrão até ela voltar.`; }
+    }
+  } catch { /* no location.json: default location */ }
+  setDataDir(libraryDir);
   const listen = (p) => new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(p, host, () => { server.off('error', reject); resolve(server.address().port); });

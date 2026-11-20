@@ -61,6 +61,22 @@ programa não apaga a biblioteca.
 Cada statblock tem um espaço para imagem: cole um **link (URL)** ou use um **arquivo local**
 (botão, arrastar e soltar ou Ctrl+V). Arquivos locais são copiados para a pasta `images` da biblioteca.
 
+## Usar a mesma biblioteca em vários computadores
+
+O programa guarda a biblioteca numa pasta comum do computador, então qualquer aplicativo que
+sincroniza pastas resolve: **Koofr**, Dropbox, MEGA, OneDrive, Google Drive para computador…
+
+1. Instale o aplicativo de sincronização (ex.: Koofr) em cada computador e crie uma pasta sincronizada, por exemplo `Koofr/FFd20`.
+2. No FFd20 Utils: **Biblioteca → Pasta da biblioteca → Escolher pasta…**, selecione essa pasta e clique em **Usar esta pasta**.
+   Com *Copiar a biblioteca atual* marcado, o que você já tinha vai junto. Se a pasta já tiver uma biblioteca de outro PC, as duas são juntadas (fica a versão mais nova de cada statblock) e nada é apagado.
+3. Repita nos outros computadores, escolhendo a mesma pasta sincronizada.
+
+As configurações (como a pasta do vault do Obsidian) continuam separadas em cada computador.
+Se o aplicativo de sincronização trouxer alterações com o programa aberto, a tela se atualiza sozinha.
+
+> Use um computador por vez e espere o aplicativo de sincronização terminar antes de abrir o programa no outro.
+> Se a mesma criatura for editada em dois PCs ao mesmo tempo, o aplicativo de sincronização pode criar uma "cópia em conflito"; o programa mostra só a versão mais nova.
+
 ## Exportar para o Obsidian
 
 - **Exportar .md:** baixa o Markdown (com *frontmatter* YAML: nome, CR, tipo, subtipos, tags). Se a imagem for um arquivo local, baixa um `.zip` com o `.md` e a imagem em `attachments/`.

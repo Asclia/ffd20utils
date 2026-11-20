@@ -83,6 +83,25 @@ function App() {
       }
     })();
   }, []);
+  // library folder changed by a sync app (Koofr, Dropbox…) while the program is open: reload
+  useEffect(() => {
+    if (!store || store.kind !== 'server') return undefined;
+    let last = null;
+    let alive = true;
+    const poll = async () => {
+      const r = await fetch('/api/library/revision', { cache: 'no-store' }).then((x) => x.json()).catch(() => null);
+      if (!alive || !r) return;
+      if (last !== null && r.revision !== last) {
+        const [en, fo, hb] = await Promise.all([store.listEntries(), store.getDoc('folders', []), store.getDoc('homebrew', {})]);
+        setEntries((en || []).map(normalize)); setFoldersState(fo || []); setHomebrewState(hb || {});
+        toast('Biblioteca atualizada (alterações vindas da pasta sincronizada).');
+      }
+      last = r.revision;
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [store]);
   useEffect(() => { try { localStorage.setItem('tab', tab); } catch { /* ignore */ } }, [tab]);
   useEffect(() => { saveDraft('monster', work.monster); }, [work.monster]);
   useEffect(() => { saveDraft('npc', work.npc); }, [work.npc]);
