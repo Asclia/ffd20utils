@@ -32,7 +32,7 @@ jobs:
       - run: npx electron-builder ${{ matrix.target }} --publish never
       - uses: actions/upload-artifact@v4
         with:
-          name: ffd20-utils-${{ matrix.os }}
+          name: compendium-${{ matrix.os }}
           path: |
             dist/*.exe
             dist/*.AppImage
@@ -56,9 +56,9 @@ jobs:
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: FFd20 Utils ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.version.outputs.tag }}
+          name: Compendium ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.version.outputs.tag }}
           make_latest: true
           files: out/*
           body: |
-            **Windows:** baixe `FFd20-Utils-…-instalador.exe` (instala e cria atalho) ou `FFd20-Utils-…-portable.exe` (abre direto, sem instalar).
+            **Windows:** baixe `Compendium-…-instalador.exe` (instala e cria atalho) ou `Compendium-…-portable.exe` (abre direto, sem instalar).
             **Linux:** baixe o `.AppImage` (dê permissão de execução e clique duas vezes) ou o `.deb` (Ubuntu/Debian).

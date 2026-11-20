@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FFd20 Utils — local server (Node.js 18+, no dependencies).
+// Compendium — local server (Node.js 18+, no dependencies).
 // Serves the web app from ./public and stores the library under ./userdata (or $FFD20_DATA).
 //   node server.js            -> http://localhost:7420
 //   PORT=8080 node server.js
@@ -340,7 +340,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     port: Number(process.env.PORT || 7420),
     host: process.env.HOST || '127.0.0.1',
   }).then(({ url, dataDir }) => {
-    console.log(`FFd20 Utils rodando em ${url}`);
+    console.log(`Compendium rodando em ${url}`);
     console.log(`Biblioteca salva em: ${dataDir}`);
     if (process.argv.includes('--open')) {
       const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;

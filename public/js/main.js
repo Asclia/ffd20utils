@@ -7,17 +7,26 @@ import { Library } from './ui/library.js';
 import { Homebrew } from './ui/homebrew.js';
 import { Dungeons } from './ui/dungeons.js';
 import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
+import { AppearanceDialog } from './ui/appearance.js';
 import { debounce, deepClone } from './util.js';
 import { SUBTYPE_BY_ID } from './rules/types.js';
 
 const TABS = [
-  ['bestiary', 'Bestiário'],
-  ['monster', 'Criação de Monstros'],
-  ['npc', 'Criação de NPCs'],
-  ['dungeons', 'Masmorras'],
-  ['library', 'Biblioteca'],
-  ['homebrew', 'Homebrew'],
+  ['bestiary', 'Bestiário', '📖'],
+  ['monster', 'Monstros', '🐉'],
+  ['npc', 'NPCs', '🧙'],
+  ['dungeons', 'Masmorras', '🏰'],
+  ['library', 'Biblioteca', '📚'],
+  ['homebrew', 'Homebrew', '⚗️'],
 ];
+const TAB_TITLES = { monster: 'Criação de Monstros', npc: 'Criação de NPCs' };
+const Emblem = () => html`<svg viewBox="0 0 64 64" aria-hidden="true">
+  <defs><linearGradient id="em-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent2)"/><stop offset="1" stop-color="var(--gold)"/></linearGradient></defs>
+  <path d="M32 3 L57 17 V47 L32 61 L7 47 V17 Z" fill="none" stroke="url(#em-g)" stroke-width="3"/>
+  <path d="M32 12 L40 32 L32 52 L24 32 Z" fill="url(#em-g)"/>
+  <path d="M14 32 H50" stroke="url(#em-g)" stroke-width="2" opacity=".7"/>
+  <circle cx="32" cy="32" r="3.2" fill="var(--bg)"/>
+</svg>`;
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
@@ -72,6 +81,7 @@ function App() {
   const [homebrew, setHomebrewState] = useState({});
   const [settings, setSettingsState] = useState({});
   const [tab, setTab] = useState(() => { try { return localStorage.getItem('tab') || 'bestiary'; } catch { return 'bestiary'; } });
+  const [showAppearance, setShowAppearance] = useState(false);
   const [work, setWork] = useState(() => ({
     monster: loadDraft('monster') || fresh('monster'),
     npc: loadDraft('npc') || fresh('npc'),
@@ -133,7 +143,7 @@ function App() {
   }), [db, store, entries, folders, homebrew, settings]);
 
   if (err) return html`<div class="fatal"><h1>Erro ao carregar</h1><p>${err}</p><p>Abra o programa pelo servidor local: <code>node server.js</code> e acesse http://localhost:7420</p></div>`;
-  if (!db || !store) return html`<div class="loading">Carregando regras do FFd20…</div>`;
+  if (!db || !store) return html`<div class="loading">Abrindo o Compendium…</div>`;
 
   const setDef = (mode) => (fn) => setWork((w) => ({ ...w, [mode]: { ...w[mode], def: typeof fn === 'function' ? fn(w[mode].def) : fn } }));
   // saved: JSON snapshot of the last saved/loaded state; base: snapshot of a fresh, untouched creature
@@ -163,9 +173,12 @@ function App() {
 
   return html`<div class="app">
     <header class="topbar">
-      <div class="brand">FFd20 <span>Utils</span></div>
-      <nav class="tabs">${TABS.map(([k, l]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${l}${(k === 'monster' || k === 'npc') && isDirty(k) ? html`<i class="dot">●</i>` : null}</button>`)}</nav>
-      <div class="store-kind" title=${store.kind === 'server' ? 'Salvando em arquivos locais' : 'Salvando no navegador'}>${store.kind === 'server' ? '💾 local' : '🌐 navegador'}</div>
+      <button class="brand" onClick=${() => setTab('bestiary')} title="Compendium"><${Emblem} /><b>Compendium</b></button>
+      <nav class="tabs">${TABS.map(([k, l, i]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)} title=${TAB_TITLES[k] || l}><span class="ti">${i}</span><span class="tl">${l}</span>${(k === 'monster' || k === 'npc') && isDirty(k) ? html`<i class="dot" title="Alterações não salvas">●</i>` : null}</button>`)}</nav>
+      <div class="top-right">
+        <span class="store-kind" title=${store.kind === 'server' ? 'Salvando em arquivos na pasta da biblioteca' : 'Salvando no navegador'}>${store.kind === 'server' ? '💾' : '🌐'}</span>
+        <button class="btn small ghost" onClick=${() => setShowAppearance(true)} title="Tema, cores, fontes e tamanho">🎨 Aparência</button>
+      </div>
     </header>
     <main><${ErrorBoundary} key=${tab}>
       ${tab === 'bestiary' ? html`<${Bestiary} app=${app} onOpen=${openEntry} />` : null}
@@ -176,6 +189,7 @@ function App() {
       ${tab === 'homebrew' ? html`<${Homebrew} app=${app} />` : null}
     </${ErrorBoundary}></main>
     <footer class="foot">Regras: <a href="https://finalfantasyd20.com/" target="_blank" rel="noopener">finalfantasyd20.com</a> (FFd20) e <a href="https://www.d20pfsrd.com/" target="_blank" rel="noopener">d20pfsrd.com</a> (Pathfinder OGL). Ferramenta de fã, sem afiliação.</footer>
+    ${showAppearance ? html`<${AppearanceDialog} onClose=${() => setShowAppearance(false)} />` : null}
     <${Toasts} />
     <${AskHost} />
   </div>`;

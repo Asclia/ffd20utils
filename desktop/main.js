@@ -1,4 +1,4 @@
-// FFd20 Utils — desktop app (Electron). Starts the same local server used by the web
+// Compendium — desktop app (Electron). Starts the same local server used by the web
 // version in the background and shows the app in its own window.
 import { app, BrowserWindow, shell, Menu, dialog, ipcMain } from 'electron';
 import path from 'node:path';
@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let win = null;
+// Keep the data folder of earlier versions (the app was called "FFd20 Utils"; package name ffd20utils).
+app.setPath('userData', path.join(app.getPath('appData'), 'ffd20utils'));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -25,7 +27,7 @@ async function start() {
     Menu.setApplicationMenu(null);
     win = new BrowserWindow({
       width: 1440, height: 920, minWidth: 900, minHeight: 600,
-      title: 'FFd20 Utils', backgroundColor: '#0f1420', show: false,
+      title: 'Compendium', backgroundColor: '#12101a', show: false,
       icon: path.join(__dirname, 'icon.png'),
       webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
     });
@@ -51,7 +53,7 @@ async function start() {
     });
     await win.loadURL(url);
   } catch (e) {
-    dialog.showErrorBox('FFd20 Utils', `Não foi possível iniciar o programa:\n${e.stack || e.message}`);
+    dialog.showErrorBox('Compendium', `Não foi possível iniciar o programa:\n${e.stack || e.message}`);
     app.quit();
   }
 }

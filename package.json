@@ -1,7 +1,7 @@
 {
   "name": "ffd20utils",
-  "version": "1.5.0",
-  "description": "Criador de monstros e NPCs para Final Fantasy d20 (FFd20) com statblocks no formato Pathfinder 1e.",
+  "version": "2.0.0",
+  "description": "Compendium — criador de monstros, NPCs e masmorras para Final Fantasy d20 (FFd20) e Pathfinder 1e.",
   "type": "module",
   "private": true,
   "engines": {
@@ -18,14 +18,14 @@
   },
   "main": "desktop/main.js",
   "author": {
-    "name": "FFd20 Utils"
+    "name": "Compendium"
   },
   "homepage": "https://github.com/Asclia/ffd20utils",
   "build": {
     "appId": "com.ffd20utils.app",
-    "productName": "FFd20 Utils",
-    "executableName": "ffd20-utils",
-    "artifactName": "FFd20-Utils-${version}-${os}-${arch}.${ext}",
+    "productName": "Compendium",
+    "executableName": "compendium",
+    "artifactName": "Compendium-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -53,15 +53,15 @@
       "icon": "desktop/icon.ico"
     },
     "portable": {
-      "artifactName": "FFd20-Utils-${version}-portable.${ext}"
+      "artifactName": "Compendium-${version}-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "FFd20 Utils",
-      "artifactName": "FFd20-Utils-${version}-instalador.${ext}"
+      "shortcutName": "Compendium",
+      "artifactName": "Compendium-${version}-instalador.${ext}"
     },
     "linux": {
       "target": [
@@ -70,8 +70,8 @@
       ],
       "icon": "desktop/icon.png",
       "category": "Game",
-      "synopsis": "Criador de monstros e NPCs para FFd20",
-      "maintainer": "FFd20 Utils <ffd20utils@users.noreply.github.com>"
+      "synopsis": "Criador de monstros, NPCs e masmorras para FFd20 e Pathfinder",
+      "maintainer": "Compendium <ffd20utils@users.noreply.github.com>"
     }
   },
   "devDependencies": {

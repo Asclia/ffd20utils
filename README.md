@@ -1,7 +1,10 @@
-# FFd20 Utils — Criador de Monstros e NPCs
+# Compendium — Monstros, NPCs e Masmorras
 
-Criador (não gerador) de monstros e NPCs para **Final Fantasy d20 (FFd20)**, com statblocks no
-formato padrão do **Pathfinder 1e**. Você define as escolhas; o programa faz as contas e aplica
+*(antes chamado FFd20 Utils)*
+
+Criador (não gerador) de monstros e NPCs para **Final Fantasy d20 (FFd20)** e **Pathfinder 1e**,
+com statblocks no formato padrão do Pathfinder, e criador de **masmorras** com mapa editável e
+centenas de tabelas aleatórias de uso livre. Você define as escolhas; o programa faz as contas e aplica
 automaticamente o kit de classe, tipo, subtipos, feats, MP, elementos e regras de chefe, sem impedir
 que você crie conteúdo próprio.
 
@@ -14,10 +17,10 @@ Baixe o arquivo do seu sistema na página
 
 | Sistema | Arquivo | Como abrir |
 |---|---|---|
-| Windows | `FFd20-Utils-…-instalador.exe` | Instala o programa e cria atalhos na Área de Trabalho e no Menu Iniciar. |
-| Windows | `FFd20-Utils-…-portable.exe` | Não instala nada: clique duas vezes e o programa abre. |
-| Linux | `FFd20-Utils-…-linux-x86_64.AppImage` | Clique com o botão direito → Propriedades → Permitir executar; depois clique duas vezes. |
-| Linux (Ubuntu/Debian) | `FFd20-Utils-…-linux-amd64.deb` | Clique duas vezes para instalar; o programa aparece no menu de aplicativos. |
+| Windows | `Compendium-…-instalador.exe` | Instala o programa e cria atalhos na Área de Trabalho e no Menu Iniciar. |
+| Windows | `Compendium-…-portable.exe` | Não instala nada: clique duas vezes e o programa abre. |
+| Linux | `Compendium-…-linux-x86_64.AppImage` | Clique com o botão direito → Propriedades → Permitir executar; depois clique duas vezes. |
+| Linux (Ubuntu/Debian) | `Compendium-…-linux-amd64.deb` | Clique duas vezes para instalar; o programa aparece no menu de aplicativos. |
 
 > O Windows pode mostrar "O Windows protegeu o computador" na primeira vez, porque o executável
 > não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**.
@@ -35,7 +38,19 @@ programa não apaga a biblioteca.
 | **Criação de Monstros** | Regras de criação de monstros: CR alvo; HD e armadura natural aplicados automaticamente pela tabela do PF1e (HD por tipo e CR; armadura natural que completa a CA do CR), com opção de fixar à mão; subtipos do FFd20, nível de chefe (Mini-Boss, Boss, Super Boss), MP pela *Creature MP Chart* e **análise de CR** comparando PV, CA, ataque, dano, saves e CDs com a tabela *Monster Statistics by CR*. |
 | **Criação de NPCs** | Regras de NPC do FFd20: raça (modificadores, tamanho, deslocamento, traços), classes heroicas ou básicas, arrays heroico/básico, método simplificado de perícias, **CR automático** (heroico = nível − 1; básico = nível − 2; riqueza de PJ +1), tabela de equipamento em gil e Limit Breaks só para NPCs chefes. |
 | **Biblioteca** | Pastas e subpastas (arrastar e soltar), seleção múltipla, mover, excluir, exportar `.md`/JSON, backup completo e importação. Configuração da pasta de exportação (vault do Obsidian). |
+| **Masmorras** | Gera o mapa (salas e corredores ou cavernas) a partir de uma semente e deixa você editar tudo: pintar chão/rocha/água/escombros, arrastar para criar salas, portas, portas secretas, grades, escadas, armadilhas, baús, estátuas, pilares e altares, com desfazer. Cada sala recebe sugestões (característica, detalhe, perigo, criaturas pelo nível do grupo — da sua biblioteca ou das listas oficiais do FFd20/PF, armadilha, tesouro, oportunidade), todas re-roláveis com 🎲 e editáveis. Exporta PNG, Markdown + mapa (ZIP) ou imprime. Inclui um navegador de **tabelas aleatórias** (Maze Rats e Ironsworn: Delve). |
 | **Homebrew** | Raças, subtipos, feats, habilidades e classes próprios, que passam a aparecer nos editores. Raças homebrew têm modificadores de atributo (ou +2 à escolha), tamanho, tipo, subtipos, deslocamento, idiomas, feat/graduações bônus, traços, habilidades no statblock, afinidades elementais, imunidades, sentidos e modificadores (ex.: +2 racial em Perception). |
+
+Cada criatura e masmorra é do sistema **FFd20** ou **Pathfinder 1e** (botão no topo do editor; o
+padrão para novas fica em *Biblioteca → Configurações*). No Pathfinder entram as classes, raças e
+magias do PF1e (d20pfsrd), energias no lugar dos elementos do FF, magias por dia no lugar de MP e sem
+regras de chefe/Limit Break.
+
+## Aparência
+
+O botão **🎨 Aparência** no topo escolhe o tema (Arcano, Pergaminho, Élfico, Dracônico, Cristal,
+Marfim ou automático), a cor de destaque, as fontes, o tamanho da interface, o espaçamento, o tamanho
+das cartas do bestiário, ornamentos, textura e o papel/fonte do statblock. Fica salvo em cada computador.
 
 ## O que é automatizado
 
@@ -67,7 +82,7 @@ O programa guarda a biblioteca numa pasta comum do computador, então qualquer a
 sincroniza pastas resolve: **Koofr**, Dropbox, MEGA, OneDrive, Google Drive para computador…
 
 1. Instale o aplicativo de sincronização (ex.: Koofr) em cada computador e crie uma pasta sincronizada, por exemplo `Koofr/FFd20`.
-2. No FFd20 Utils: **Biblioteca → Pasta da biblioteca → Escolher pasta…**, selecione essa pasta e clique em **Usar esta pasta**.
+2. No Compendium: **Biblioteca → Pasta da biblioteca → Escolher pasta…**, selecione essa pasta e clique em **Usar esta pasta**.
    Com *Copiar a biblioteca atual* marcado, o que você já tinha vai junto. Se a pasta já tiver uma biblioteca de outro PC, as duas são juntadas (fica a versão mais nova de cada statblock) e nada é apagado.
 3. Repita nos outros computadores, escolhendo a mesma pasta sincronizada.
 
@@ -97,6 +112,14 @@ python3 tools/fetch_sources.py ./cache
 python3 tools/build_data.py ./cache
 ```
 
+Tabelas aleatórias e listas de masmorra (`tables.json`, `monsters.json`) vêm de `tools/build_tables.py`;
+as classes, raças e magias do Pathfinder de `tools/build_pf.py`. Licenças:
+
+- **Maze Rats** © Ben Milton — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- **Ironsworn: Delve** © Shawn Tomkin — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (via Datasworn).
+- **Pathfinder** (classes, raças, magias, armadilhas, lista de monstros) — Open Game License 1.0a, via d20pfsrd.com e aonprd.com.
+- Fontes **Cinzel**, **Cinzel Decorative**, **Alegreya Sans** e **EB Garamond** — SIL Open Font License (`public/fonts`).
+
 As tabelas de criação (CR, HD por tipo, MP de criaturas, bônus de MP, riqueza de NPC, chefes) ficam
 em `public/js/rules/tables.js`; tipos e subtipos em `public/js/rules/types.js`; a automação de
 feats em `public/js/rules/featEffects.js`.
@@ -104,7 +127,7 @@ feats em `public/js/rules/featEffects.js`.
 ### Limitações conhecidas
 
 - Características de classe aparecem no statblock com o valor da tabela, mas os **efeitos numéricos** delas (ex.: o bônus de CA de *Defensive Stance*) não são aplicados automaticamente: use *Modificadores personalizados*.
-- Talentos (Mage Talents, Knight Talents…) e arquétipos não estão na base; anote-os na característica correspondente.
+- Classes ocultistas do Pathfinder (Kineticist, Medium…) não têm tabela de classe no d20pfsrd, então não aparecem como classe (as listas de magia delas existem).
 - Feats sem ⚙ são listados no statblock, mas os efeitos deles não são calculados.
 - O texto dos statblocks é em inglês (padrão dos statblocks de PF1e e dos termos do FFd20); a interface é em português.
 
