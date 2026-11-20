@@ -142,3 +142,33 @@ export const SUBTYPES = [
 export const SUBTYPE_BY_ID = Object.fromEntries(SUBTYPES.map((s) => [s.id, s]));
 
 export const SENSES_COMMON = ['darkvision 60 ft.', 'darkvision 120 ft.', 'low-light vision', 'blindsense 30 ft.', 'blindsense 60 ft.', 'blindsight 30 ft.', 'blindsight 60 ft.', 'tremorsense 30 ft.', 'tremorsense 60 ft.', 'scent', 'see in darkness', 'see invisibility', 'true seeing', 'mist vision', 'snow vision', 'cloud sight', 'hypersenses'];
+
+// ------------------------------------------------------------------ Pathfinder 1e
+export const SYSTEMS = { ffd20: 'FFd20', pf1e: 'Pathfinder 1e' };
+export const PF_ENERGIES = ['acid', 'cold', 'electricity', 'fire', 'sonic'];
+export const PF_ENERGY_PT = { acid: 'Ácido', cold: 'Frio', electricity: 'Eletricidade', fire: 'Fogo', sonic: 'Sônico' };
+// PF affinities: no absorb/strong; "weak" renders as "vulnerability to X" (+50% damage)
+export const PF_AFFINITIES = { '': '—', weak: 'Vulnerável (+50%)', resist: 'Resistência X', immune: 'Imunidade' };
+// FFd20 element <-> PF energy (FFd20 conversion rules: acid→earth, cold→ice, electricity→lightning, fire→fire, sonic→non-elemental)
+export const FF_TO_PF = { fire: 'fire', ice: 'cold', lightning: 'electricity', earth: 'acid' };
+export const PF_TO_FF = { fire: 'fire', cold: 'ice', electricity: 'lightning', acid: 'earth' };
+export const elementsFor = (system) => (system === 'pf1e' ? PF_ENERGIES : ELEMENTS);
+export const elementNamePT = (system, el) => (system === 'pf1e' ? PF_ENERGY_PT[el] : ELEMENT_PT[el]) || el;
+
+// Type rules where Pathfinder differs from the FFd20 overrides above
+const PF_UNDEAD_IMM = ['mind-affecting effects', 'bleed', 'death effects', 'disease', 'paralysis', 'poison', 'sleep', 'stun', 'nonlethal damage', 'ability drain', 'energy drain', 'fatigue', 'exhaustion', 'Fort-save effects'];
+const PF_CONSTRUCT_IMM = ['mind-affecting effects', 'bleed', 'disease', 'death effects', 'necromancy effects', 'paralysis', 'poison', 'sleep', 'stun', 'ability damage', 'ability drain', 'fatigue', 'exhaustion', 'energy drain', 'nonlethal damage', 'Fort-save effects'];
+export const PF_TYPE_OVERRIDES = {
+  undead: { elements: {}, immunities: PF_UNDEAD_IMM, traits: 'Sem Con (usa Car para PV e Fort). Imunidades padrão de morto-vivo do PF1e. Energia negativa cura, positiva fere. Destruído a 0 PV.' },
+  construct: { immunities: PF_CONSTRUCT_IMM, traits: 'Sem Con. Imunidades padrão de constructo do PF1e. PV bônus por tamanho. Destruído a 0 PV.' },
+  ooze: { flags: { noInt: true }, traits: 'Mindless, cego (blindsight), imune a efeitos visuais, veneno, sono, paralisia, polimorfia, atordoamento, críticos e flanqueio.' },
+  dragon: { traits: 'Imune a sono mágico e paralisia; darkvision 60 ft. e visão na penumbra.' },
+};
+// Elemental subtypes with Pathfinder rules
+export const PF_SUBTYPE_OVERRIDES = {
+  fire: { elements: { fire: 'immune', cold: 'weak' }, traits: 'Imune a fogo, vulnerável a frio.' },
+  cold: { elements: { cold: 'immune', fire: 'weak' }, traits: 'Imune a frio, vulnerável a fogo.' },
+  air: { elements: {}, traits: 'Geralmente voa; Fly é perícia de classe.' },
+  earth: { elements: {}, senses: ['tremorsense 60 ft.'], traits: 'Geralmente escava e tem tremorsense.' },
+  water: { elements: {}, traits: 'Deslocamento de natação, respira água.' },
+};

@@ -7,7 +7,9 @@ const classes = JSON.parse(readFileSync(new URL('../public/data/classes.json', i
 const races = JSON.parse(readFileSync(new URL('../public/data/races.json', import.meta.url)));
 const load = (f) => JSON.parse(readFileSync(new URL(`../public/data/${f}`, import.meta.url)));
 const archetypes = load('archetypes.json');
-const db = { classesById: Object.fromEntries(classes.map((c) => [c.id, c])), racesById: Object.fromEntries(races.map((r) => [r.id, r])), homebrew: {},
+const pfClasses = load('pf-classes.json').map((c) => ({ ...c, id: `pf-${c.id}`, system: 'pf1e' }));
+const pfRaces = load('pf-races.json');
+const db = { classesById: Object.fromEntries([...classes, ...pfClasses].map((c) => [c.id, c])), racesById: Object.fromEntries([...races, ...pfRaces].map((r) => [r.id, r])), homebrew: {},
   talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])), items: load('items.json') };
 let passed = 0;
 // monsters whose HD / natural armor the test sets by hand
@@ -271,5 +273,48 @@ t('Incorporeal: deflection from Cha and crit immunity', () => {
   const c = compute(d, db);
   assert.ok(c.ac.parts.some(([v, n]) => v === 3 && n === 'deflection'));
   assert.ok(c.immunities.includes('critical hits'));
+});
+t('Pathfinder 1e NPC: wizard spells per day with bonus spells, no MP, PF hp line', () => {
+  const d = newCreature('npc', 'pf1e');
+  d.raceId = 'pf-elf';
+  d.abilities = { str: 8, dex: 14, con: 12, int: 16, wis: 10, cha: 10 };
+  d.classes = [{ id: 'w', classId: 'pf-wizard', level: 5 }];
+  d.caster.spells = [{ id: 's', name: 'Fireball', level: 3 }];
+  const c = compute(d, db);
+  assert.equal(c.abilities.int, 18);                // +2 elf
+  assert.equal(c.mp.total, 0);
+  const w = c.pfSpells[0];
+  assert.equal(w.spontaneous, false);
+  assert.deepEqual(w.perDay, { 0: 4, 1: 3 + 1, 2: 2 + 1, 3: 1 + 1 }); // Int +4: one bonus spell at 1st–3rd
+  assert.equal(c.cr, 4);
+  const md = statblockMarkdown(buildStatblock(d, c, db), d, c);
+  assert.match(md, /\*\*hp\*\* \d+ \(5d6\+\d+\)  /);
+  assert.ok(!md.includes('**MP**'));
+  assert.match(md, /Wizard Spells Prepared\*\* \(CL 5th; concentration \+9\)/);
+  assert.match(md, /3rd \(2; DC 17\)—Fireball/);
+});
+
+t('Pathfinder monster: PF undead rules and energies (FFd20 subtypes converted)', () => {
+  const d = manualMonster();
+  d.system = 'pf1e'; d.type = 'undead'; d.racialHD = 6; d.subtypes = ['fire'];
+  const c = compute(d, db);
+  assert.deepEqual(c.absorb, []);                  // no shadow absorption in PF
+  assert.ok(c.elemImmune.includes('fire'));
+  assert.deepEqual(c.weak, ['cold']);              // PF fire subtype: vulnerable to cold
+  const md = statblockMarkdown(buildStatblock(d, c, db), d, c);
+  assert.match(md, /\*\*Weaknesses\*\* vulnerability to cold/);
+  d.boss = 'boss';
+  assert.equal(compute(d, db).hp.mult, 1);         // boss tiers are FFd20-only
+});
+
+t('Pathfinder monster caster "as a 7th-level sorcerer"', () => {
+  const d = manualMonster();
+  d.system = 'pf1e'; d.racialHD = 8; d.abilities.cha = 18;
+  d.caster.pfClass = 'pf-sorcerer'; d.caster.pfLevel = 7;
+  const c = compute(d, db);
+  const p = c.pfSpells[0];
+  assert.equal(p.spontaneous, true);
+  assert.equal(p.cl, 7);
+  assert.equal(p.perDay[3], 4 + 1);                // 4 base (sorcerer 7) + 1 bonus (Cha +4)
 });
 console.log(`${passed} tests passed`);

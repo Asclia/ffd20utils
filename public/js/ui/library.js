@@ -1,5 +1,5 @@
 import { html, useState, useRef, useEffect } from '../../vendor/ui.mjs';
-import { Field, Text, Check, toast, askText } from './components.js';
+import { Field, Text, Check, Select, toast, askText } from './components.js';
 import { uid } from '../rules/engine.js';
 import { crLabel } from '../rules/tables.js';
 import { folderPath } from './editor.js';
@@ -167,6 +167,7 @@ function Settings({ app }) {
         <div class="row"><${Text} value=${s.exportDir || ''} placeholder=${'C:\\Users\\voce\\Obsidian\\Bestiario  ou  /home/voce/Obsidian/Bestiario'} onInput=${(v) => setS({ ...s, exportDir: v })} />
         ${window.ffd20Desktop ? html`<button class="btn small" onClick=${async () => { const d = await window.ffd20Desktop.pickFolder('Pasta do vault do Obsidian'); if (d) setS({ ...s, exportDir: d }); }}>Escolher…</button>` : null}</div></${Field}>
       <${Field} label="Subpasta de imagens"><${Text} value=${s.attachmentsFolder || ''} placeholder="attachments" onInput=${(v) => setS({ ...s, attachmentsFolder: v })} /></${Field}>
+      <${Field} label="Sistema padrão para criaturas novas"><${Select} value=${s.defaultSystem || 'ffd20'} onChange=${(v) => setS({ ...s, defaultSystem: v })} options=${[['ffd20', 'Final Fantasy d20'], ['pf1e', 'Pathfinder 1e']]} /></${Field}>
       <${Check} label="Manter a estrutura de pastas da biblioteca ao enviar ao vault" checked=${s.keepFolders} onChange=${(v) => setS({ ...s, keepFolders: v })} />
       <${Check} label="O botão 'Exportar .md' grava direto no vault" checked=${s.preferVault} onChange=${(v) => setS({ ...s, preferVault: v })} />
       <div class="row"><button class="btn primary small" onClick=${async () => { await app.setSettings(s); toast('Configurações salvas.'); }}>Salvar configurações</button></div>` : null}

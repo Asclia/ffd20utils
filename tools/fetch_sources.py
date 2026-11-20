@@ -24,6 +24,7 @@ WANT = re.compile(r'^/(classes/(core|base|hybrid|miscellaneous|npc|prestige)-cla
                   r'|feats/[^/]+/([^/]+/)?|feats/'
                   r'|races/(core|base|monstrous)-races/[^/]+/|races/beastman-tribes/[^/]+/'
                   r'|magic/spells-by-class/([^/]+/)?|magic/spells/[a-z0-9]/[^/]+/|magic/mp-system/'
+                  r'|gamemastering/bestiary/[^/]+/[^/]+/([^/]+/)?'
                   r'|gamemastering/bestiary/universal-monster-rules/([^/]+/)?)$')
 
 
@@ -77,7 +78,30 @@ def main():
             print('d20pfsrd', cat)
             with open(f, 'w', encoding='utf8') as fh:
                 fh.write(get(f'https://www.d20pfsrd.com/feats/{cat}-feats/'))
-    print('done. Now run: python3 tools/build_data.py', cache)
+    # random tables and creature lists (tools/build_tables.py)
+    tdir = os.path.join(cache, 'tables')
+    os.makedirs(tdir, exist_ok=True)
+    extras = {
+        'MazeRatsTables.md': 'https://raw.githubusercontent.com/skpy/MazeRatsObsidian/main/MazeRatsTables.md',
+        'pf_gamemastering_traps-hazards-and-special-terrains_traps_.html': 'https://www.d20pfsrd.com/gamemastering/traps-hazards-and-special-terrains/traps/',
+        'aon_monsters.html': 'https://www.aonprd.com/Monsters.aspx?Letter=All',
+    }
+    for name, url in extras.items():
+        f = os.path.join(tdir, name)
+        if not os.path.exists(f):
+            print('download', url)
+            with open(f, 'w', encoding='utf8') as fh:
+                fh.write(get(url))
+    ds = os.path.join(tdir, 'ds')
+    if not os.path.isdir(ds):
+        import subprocess
+        import tarfile
+        os.makedirs(ds, exist_ok=True)
+        for pkg in ('@datasworn/ironsworn-classic', '@datasworn/ironsworn-classic-delve'):
+            out = subprocess.run(['npm', 'pack', pkg], cwd=ds, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]
+            with tarfile.open(os.path.join(ds, out)) as tf:
+                tf.extractall(os.path.join(ds, out[:-4]), filter='data')
+    print('done. Now run: python3 tools/build_data.py', cache, ' and  python3 tools/build_tables.py', cache)
 
 
 if __name__ == '__main__':

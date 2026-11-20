@@ -6,7 +6,7 @@ import {
   ABILITIES, ABILITY_NAMES, ABILITY_LONG, mod, sign, CR_LIST, crLabel, SIZES, SIZE_PT, SIZE_DATA, ALIGNMENTS,
   suggestedHD, BOSS_TIERS, CASTER_TIERS, NPC_ARRAYS, npcGear, PC_WEALTH, scaleDiceForSize, statsForCR, ordinal,
 } from '../rules/tables.js';
-import { TYPES, SUBTYPES, ELEMENTS, ELEMENT_PT, AFFINITIES, IMMUNITY_GROUPS, SENSES_COMMON } from '../rules/types.js';
+import { TYPES, SUBTYPES, ELEMENTS, ELEMENT_PT, AFFINITIES, IMMUNITY_GROUPS, SENSES_COMMON, SYSTEMS, elementsFor, elementNamePT, PF_AFFINITIES } from '../rules/types.js';
 import { SKILLS, NPC_SKILL_SELECTIONS } from '../rules/skills.js';
 import { featEffect, featKey } from '../rules/featEffects.js';
 import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
@@ -16,7 +16,7 @@ import { TalentsSection } from './talents.js';
 
 const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
 const KINDS = [['Ex', 'Ex'], ['Su', 'Su'], ['Sp', 'Sp'], ['', '—']];
-const CAT_PT = { core: 'Core', base: 'Base', hybrid: 'Híbridas', misc: 'Diversas', npc: 'Classes de NPC', prestige: 'Prestígio', homebrew: 'Homebrew' };
+const CAT_PT = { core: 'Core', base: 'Base', hybrid: 'Híbridas', misc: 'Diversas', npc: 'Classes de NPC', prestige: 'Prestígio', homebrew: 'Homebrew', unchained: 'Unchained', alternate: 'Alternativas' };
 
 export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirty, inLibrary }) {
   const { db, homebrew, folders } = app;
@@ -37,6 +37,8 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
     <div class="ed-toolbar">
       <input class="ed-name" value=${def.name} onInput=${(e) => up({ name: e.target.value })} placeholder="Nome" />
       <span class="cr-pill">CR ${crLabel(c.cr)}</span>
+      <div class="seg system-seg" title="Sistema de regras desta criatura">${Object.entries(SYSTEMS).map(([k, l]) => html`<button class=${(def.system || 'ffd20') === k ? 'on' : ''}
+        onClick=${() => (def.system || 'ffd20') !== k && up({ system: k, classes: def.classes.filter((x) => (k === 'pf1e') === String(x.classId).startsWith('pf-')), raceId: '' })}>${l}</button>`)}</div>
       ${dirty ? html`<span class="unsaved">● alterações não salvas</span>` : inLibrary ? html`<span class="saved">✓ salvo na biblioteca</span>` : html`<span class="muted small">novo (ainda não salvo)</span>`}
       <div class="spacer"></div>
       <button class="btn primary" onClick=${onSave} title="Ctrl+S">Salvar</button>
@@ -144,8 +146,8 @@ function MonsterTypeSection({ def, up, c, homebrew, db }) {
         }} />`)}
         ${def.goodSaves ? html`<button class="btn tiny ghost" onClick=${() => up({ goodSaves: null })}>auto</button>` : null}</div>
       </${Field}>
-      <${Field} label="Nível de chefe (FFd20)"><${Select} value=${def.boss} onChange=${(v) => up({ boss: v })} options=${Object.entries(BOSS_TIERS).map(([k, v]) => [k, v.label])} /></${Field}>
-      ${(def.boss === 'boss' || def.boss === 'super') ? html`
+      ${def.system === 'pf1e' ? null : html`<${Field} label="Nível de chefe (FFd20)"><${Select} value=${def.boss} onChange=${(v) => up({ boss: v })} options=${Object.entries(BOSS_TIERS).map(([k, v]) => [k, v.label])} /></${Field}>`}
+      ${def.system !== 'pf1e' && (def.boss === 'boss' || def.boss === 'super') ? html`
         <${Field} label="Multiplicador de PV"><${Select} value=${def.bossHPMult} onChange=${(v) => up({ bossHPMult: Number(v) })} options=${[['2', '×2 (Boss / Super Boss com vidas)'], ['3', '×3 (Super Boss sem vidas)']]} /></${Field}>
         <${Field} label=" "><${Check} label="Usar d12 (como nos chefes oficiais)" checked=${def.bossD12} onChange=${(v) => up({ bossD12: v })} /></${Field}>` : null}
     </div>
@@ -172,7 +174,7 @@ function NpcRaceSection({ def, up, db, c, homebrew }) {
   const race = findRace(def.raceId);
   const opts = [{ value: '', label: '(sem raça / personalizado)' },
     ...hbRaces.map((r) => ({ value: r.id, label: r.name, group: 'Homebrew' })),
-    ...db.races.map((r) => ({ value: r.id, label: r.name, group: { 'core-races': 'Core', 'base-races': 'Base', 'beastman-tribes': 'Beastman', 'monstrous-races': 'Monstrous' }[r.category] || r.category }))];
+    ...db.races.filter((r) => (r.system || 'ffd20') === (def.system || 'ffd20')).map((r) => ({ value: r.id, label: r.name, group: { 'core-races': 'Core', 'base-races': 'Base', 'beastman-tribes': 'Beastman', 'monstrous-races': 'Monstrous', 'featured-races': 'Featured', 'uncommon-races': 'Uncommon' }[r.category] || r.category }))];
   const pickRace = (id) => {
     const r = findRace(id);
     if (!r) return up({ raceId: '' });
@@ -197,9 +199,10 @@ function NpcRaceSection({ def, up, db, c, homebrew }) {
 
 // ------------------------------------------------------------------ classes
 function ClassesSection({ def, up, db, c, npc, homebrew }) {
-  const allClasses = [...db.classes, ...(homebrew.classes || []).map((x) => ({ ...x, category: 'homebrew' }))];
+  const sys = def.system || 'ffd20';
+  const allClasses = [...db.classes.filter((x) => (x.system || 'ffd20') === sys), ...(homebrew.classes || []).map((x) => ({ ...x, category: 'homebrew' }))];
   const opts = allClasses.map((x) => ({ value: x.id, label: x.name, group: CAT_PT[x.category] || x.category }));
-  const add = () => up({ classes: [...def.classes, { id: uid(), classId: npc ? 'warrior' : 'warrior', level: 1 }] });
+  const add = () => up({ classes: [...def.classes, { id: uid(), classId: sys === 'pf1e' ? 'pf-fighter' : 'warrior', level: 1 }] });
   return html`<${Section} title=${npc ? 'Classes e CR' : 'Níveis de classe (opcional)'} id="classes" badge=${c.classLevels ? `${c.classLevels} níveis` : ''} open=${npc}>
     <${ListEditor} items=${def.classes} onChange=${(v) => up({ classes: v })} addLabel="+ Classe" onAdd=${add}
       empty=${npc ? 'Adicione ao menos uma classe.' : 'Monstros normalmente não têm classes; adicione se quiser um monstro com níveis de classe.'}
@@ -230,8 +233,8 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
       <${Field} label="Bônus de classe favorita"><${Select} value=${def.favored} onChange=${(v) => up({ favored: v })} options=${[['hp', '+1 PV por nível'], ['skill', '+1 graduação por nível'], ['none', 'Nenhum / outro']]} /></${Field}>
       ${npc ? html`
         <${Field} label="Riqueza"><${Check} label="Riqueza de PJ (CR +1)" checked=${def.pcWealth} onChange=${(v) => up({ pcWealth: v })} /></${Field}>
-        <${Field} label="Limit Breaks"><${Check} label="NPC chefe (tem Limit Breaks)" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>
-        <${Field} label="Nível de chefe"><${Select} value=${def.boss} onChange=${(v) => up({ boss: v })} options=${Object.entries(BOSS_TIERS).map(([k, v]) => [k, v.label])} /></${Field}>
+        ${def.system === 'pf1e' ? null : html`<${Field} label="Limit Breaks"><${Check} label="NPC chefe (tem Limit Breaks)" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
+        ${def.system === 'pf1e' ? null : html`<${Field} label="Nível de chefe"><${Select} value=${def.boss} onChange=${(v) => up({ boss: v })} options=${Object.entries(BOSS_TIERS).map(([k, v]) => [k, v.label])} /></${Field}>`}
         <${Field} label="CR" hint="Heroica: nível − 1. Básica (NPC): nível − 2. Riqueza de PJ: +1.">
           <div class="row"><b class="big">${crLabel(c.cr)}</b>
           <${Select} value=${def.crOverride ?? ''} onChange=${(v) => up({ crOverride: v === '' ? null : Number(v) })} options=${[['', 'automático'], ...CR_LIST.map((x) => [x, `forçar ${crLabel(x)}`])]} /></div>
@@ -283,6 +286,8 @@ function AbilitiesSection({ def, up, upIn, c, npc }) {
 // ------------------------------------------------------------------ defense
 function DefenseSection({ def, up, upIn, c }) {
   const [immAdd, setImmAdd] = useState('');
+  const pfSys = def.system === 'pf1e';
+  const AFF = pfSys ? PF_AFFINITIES : AFFINITIES;
   const inheritedImm = new Set([...(c.type.immunities || []), ...c.subtypes.flatMap((s) => s.immunities || [])]);
   const removeImm = (x) => {
     if ((def.immunities || []).includes(x)) up({ immunities: def.immunities.filter((y) => y !== x) });
@@ -318,20 +323,20 @@ function DefenseSection({ def, up, upIn, c }) {
         ${it.kind === 'armor' ? html`<label class="inline">Des máx <${Num} value=${it.maxDex} allowEmpty onInput=${(v) => set({ maxDex: v })} /></label>` : null}
         ${it.kind === 'armor' || it.kind === 'shield' ? html`<label class="inline">penal. <${Num} value=${it.acp} onInput=${(v) => set({ acp: v })} /></label>` : null}
       </div>`} />
-    <h4>Perfil elemental (FFd20)</h4>
+    <h4>${pfSys ? 'Energias (Pathfinder)' : 'Perfil elemental (FFd20)'}</h4>
     <div class="elements">
-      ${ELEMENTS.map((el) => {
+      ${elementsFor(def.system).map((el) => {
         const ov = def.elementOverrides?.[el];
         const eff = c.elements[el] || '';
         return html`<div class="el-row el-${el}">
-          <span class="el-name">${ELEMENT_PT[el]}</span>
+          <span class="el-name">${elementNamePT(def.system, el)}</span>
           <${Select} value=${ov === undefined || ov === null ? 'inherit' : ov} onChange=${(v) => upIn('elementOverrides', { [el]: v })}
-            options=${[['inherit', `auto${eff && (ov === undefined || ov === 'inherit') ? ` (${AFFINITIES[eff]})` : ''}`], ['none', 'nenhuma'], ...Object.entries(AFFINITIES).filter(([k]) => k).map(([k, v]) => [k, v])]} />
+            options=${[['inherit', `auto${eff && (ov === undefined || ov === 'inherit') ? ` (${AFF[eff]})` : ''}`], ['none', 'nenhuma'], ...Object.entries(AFF).filter(([k]) => k).map(([k, v]) => [k, v])]} />
           ${(eff === 'resist' || def.elementResist?.[el]) ? html`<${Num} value=${def.elementResist?.[el] ?? c.elementResist[el] ?? 10} onInput=${(v) => upIn('elementResist', { [el]: v })} />` : null}
         </div>`;
       })}
     </div>
-    <div class="muted small">Ciclo: Vento → Terra → Raio → Água → Fogo → Gelo → Vento (cada um é forte contra o próximo). Sagrado e Sombra são opostos.</div>
+    ${pfSys ? null : html`<div class="muted small">Ciclo: Vento → Terra → Raio → Água → Fogo → Gelo → Vento (cada um é forte contra o próximo). Sagrado e Sombra são opostos.</div>`}
     <h4>Imunidades a efeitos e status</h4>
     <${Chips} items=${nonElemImm} onRemove=${removeImm} render=${(x) => html`${x}${inheritedImm.has(x) ? html`<small class="muted"> (tipo)</small>` : null}`} />
     <div class="row">
@@ -519,14 +524,17 @@ function SkillsSection({ def, up, c, npc }) {
 // ------------------------------------------------------------------ magic
 function MagicSection({ def, up, upIn, c, db, npc }) {
   const casterClasses = c.classes.filter((x) => x.def.caster).map((x) => x.def.id);
-  const spellLists = [...new Set(db.spells.map((s) => s.class))].sort();
+  const pfSys = def.system === 'pf1e';
+  const sysSpells = useMemo(() => db.spells.filter((s) => (pfSys ? String(s.class).startsWith('pf-') : !String(s.class).startsWith('pf-'))), [db.spells, pfSys]);
+  const spellLists = [...new Set(sysSpells.map((s) => s.class))].sort();
+  if (pfSys && def.caster?.pfClass && !casterClasses.includes(def.caster.pfClass)) casterClasses.push(def.caster.pfClass);
   const defaultList = casterClasses.map((id) => SPELL_LIST_OF[id] || id).flat().find((x) => spellLists.includes(x)) || '__all';
   const [list, setList] = useState(defaultList);
   const [lvFilter, setLvFilter] = useState('');
   const [custom, setCustom] = useState({ name: '', level: 1 });
   const maxSL = c.mp.maxSL;
   const spells = def.caster?.spells || [];
-  const addSpell = (s) => upIn('caster', { spells: [...spells, { id: uid(), name: s.name, level: s.level }] });
+  const addSpell = (s) => upIn('caster', { spells: [...spells, { id: uid(), name: s.name, level: s.level, ...(String(s.class).startsWith('pf-') && !list.startsWith('__') ? { classId: s.class } : {}) }] });
   const removeSpell = (id) => upIn('caster', { spells: spells.filter((x) => x.id !== id) });
   const byLevel = {};
   for (const s of spells) (byLevel[s.level] = byLevel[s.level] || []).push(s);
@@ -534,8 +542,33 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
     const mine = casterClasses.map((id) => SPELL_LIST_OF[id] || [id]);
     const ids = list === '__all' || (list === '__mine' && mine.some((x) => !x.length)) ? null : list === '__mine' ? mine.flat() : [list];
     const seen = new Set();
-    return db.spells.filter((s) => (!ids || ids.includes(s.class)) && !seen.has(s.name + s.level) && seen.add(s.name + s.level));
-  }, [db.spells, list, casterClasses.join()]);
+    return sysSpells.filter((s) => (!ids || ids.includes(s.class)) && !seen.has(s.name + s.level) && seen.add(s.name + s.level));
+  }, [sysSpells, list, casterClasses.join()]);
+  const pfCasters = db.classes.filter((x) => x.system === 'pf1e' && x.caster);
+  if (pfSys) return html`<${Section} title="Magia (magias por dia)" id="magic" badge=${c.pfSpells?.length ? c.pfSpells.map((p) => `${p.source} ${p.cl}`).join(' / ') : ''} open=${!!c.pfSpells?.length}>
+    <div class="grid">
+      <${Field} label="Conjura como (monstro)" hint="Ex.: um monstro que 'conjura como um sorcerer de 7º nível' (PF1e). Classes do NPC já contam sozinhas.">
+        <${Select} value=${def.caster.pfClass || ''} onChange=${(v) => upIn('caster', { pfClass: v, pfLevel: v ? (def.caster.pfLevel || c.hd || 1) : 0 })}
+          options=${[['', '—'], ...pfCasters.map((x) => [x.id, x.name])]} /></${Field}>
+      ${def.caster.pfClass ? html`<${Field} label="Nível de conjurador"><${Num} value=${def.caster.pfLevel} min=${1} max=${20} onInput=${(v) => upIn('caster', { pfLevel: v })} /></${Field}>` : null}
+      <${Field} label="Nome da lista" hint="Ex.: Sorcerer Spells Known"><${Text} value=${def.caster.listName} placeholder="automático" onInput=${(v) => upIn('caster', { listName: v })} /></${Field}>
+    </div>
+    ${c.pfSpells?.length ? html`<div class="mp-break">${c.pfSpells.map((p) => html`<div><b>${p.source} ${p.cl}</b> (${p.spontaneous ? 'espontâneo' : 'preparado'}, ${p.ability.toUpperCase()} ${c.abilities[p.ability] ?? '—'}): ${Object.entries(p.perDay).map(([lv, n]) => `${lv === '0' ? '0' : ordinal(Number(lv))} ${lv === '0' ? '∞' : n}`).join(' · ')}</div>`)}
+      <div class="small muted">Já inclui as magias bônus pelo atributo de conjuração.</div></div>`
+    : html`<div class="muted small">Sem magias. Adicione uma classe conjuradora ou escolha "Conjura como".</div>`}
+    <h4>Magias ${c.pfSpells?.some((p) => !p.spontaneous) ? 'preparadas / conhecidas' : 'conhecidas'}</h4>
+    ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => html`<span class="chip">${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`)}</div>`)}
+    <div class="row wrap">
+      <${Select} value=${list} onChange=${setList} options=${[...(casterClasses.length ? [['__mine', 'Listas das minhas classes']] : []), ['__all', 'Todas as listas'], ...spellLists.map((x) => [x, `Lista: ${x.replace(/^pf-/, '').replace(/-/g, ' ')}`])]} />
+      <${Select} value=${lvFilter} onChange=${setLvFilter} options=${[['', 'todos os níveis'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), `nível ${l}`])]} />
+    </div>
+    <${SearchPicker} items=${items} getText=${(s) => s.name} onPick=${addSpell} placeholder="Buscar magia…"
+      filter=${(s) => (lvFilter === '' || s.level === Number(lvFilter)) && (!maxSL || s.level <= maxSL || lvFilter !== '')}
+      renderItem=${(s) => html`<span><b>${s.name}</b> <span class="src-badge">nv ${s.level}${list.startsWith('__') ? ` · ${s.class.replace(/^pf-/, '').replace(/-/g, ' ')}` : ''}</span><br /><span class="small muted">${s.summary?.slice(0, 160)}</span></span>`} />
+    <h4>Spell-Like Abilities</h4>
+    <${ListEditor} items=${def.caster.sla || []} onChange=${(v) => upIn('caster', { sla: v })} addLabel="+ SLA" onAdd=${() => upIn('caster', { sla: [...(def.caster.sla || []), { id: uid(), freq: 'At will', name: '' }] })}
+      render=${(s, set) => html`<div class="row"><input type="text" class="w-freq" value=${s.freq} onInput=${(e) => set({ freq: e.target.value })} placeholder="At will / 3/day" /><input type="text" value=${s.name} onInput=${(e) => set({ name: e.target.value })} placeholder="magia (DC 15)" /></div>`} />
+  </${Section}>`;
   return html`<${Section} title="Magia (MP)" id="magic" badge=${c.mp.total ? `${c.mp.total} MP` : ''} open=${!!c.mp.total}>
     <div class="grid">
       <${Field} label="Conjurador (monstro)" hint="Tabela Creature MP Chart do FFd20. Criaturas com classes conjuradoras usam o MP da classe.">
@@ -710,8 +743,8 @@ function NpcWealth({ def, c }) {
   const g = npcGear(lvl, c.heroic);
   return html`<div class="panel">
     <h4>Equipamento de NPC (nível ${lvl}, ${c.heroic ? 'heroico' : 'básico'})</h4>
-    ${def.pcWealth ? html`<p>Riqueza de PJ: <b>${(PC_WEALTH[Math.min(20, lvl)] || 0).toLocaleString('pt-BR')} gil</b></p>` : g ? html`<table class="cr-table"><tbody>
-      <tr><td>Total</td><td><b>${g.total.toLocaleString('pt-BR')} gil</b></td></tr>
+    ${def.pcWealth ? html`<p>Riqueza de PJ: <b>${(PC_WEALTH[Math.min(20, lvl)] || 0).toLocaleString('pt-BR')} ${def.system === 'pf1e' ? 'gp' : 'gil'}</b></p>` : g ? html`<table class="cr-table"><tbody>
+      <tr><td>Total</td><td><b>${g.total.toLocaleString('pt-BR')} ${def.system === 'pf1e' ? 'gp' : 'gil'}</b></td></tr>
       <tr><td>Armas</td><td>${g.weapons.toLocaleString('pt-BR')}</td></tr>
       <tr><td>Proteção</td><td>${g.protection.toLocaleString('pt-BR')}</td></tr>
       <tr><td>Mágicos</td><td>${g.magic.toLocaleString('pt-BR')}</td></tr>

@@ -19,15 +19,21 @@ const TABS = [
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypesRaw] = await Promise.all(
-    ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json'].map(get));
-  // Pathfinder subtypes not already defined with FFd20 rules (types.js)
+  const [ffClasses, feats, ffSpells, ffRaces, talentsByClass, archetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters] = await Promise.all(
+    ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json',
+      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json'].map(get));
+  // Pathfinder subtypes not already defined with rules in types.js
   const pfSubtypes = pfSubtypesRaw.filter((x) => !SUBTYPE_BY_ID[x.id]).map((x) => ({ id: x.id, name: x.name, traits: x.text, pf: true }));
+  // Both systems share one database; Pathfinder class ids get a "pf-" prefix (bard, cleric… exist in both)
+  const classes = [
+    ...ffClasses.map((c) => ({ ...c, system: 'ffd20' })),
+    ...pfClasses.map((c) => ({ ...c, id: `pf-${c.id}`, system: 'pf1e' })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+  const races = [...ffRaces.map((r) => ({ ...r, system: 'ffd20' })), ...pfRaces].sort((a, b) => a.name.localeCompare(b.name));
+  const spells = [...ffSpells.map((x) => ({ ...x, system: 'ffd20' })), ...pfSpells.map((x) => ({ ...x, class: `pf-${x.class}` }))];
   archetypes.sort((a, b) => a.name.localeCompare(b.name));
-  classes.sort((a, b) => a.name.localeCompare(b.name));
-  races.sort((a, b) => a.name.localeCompare(b.name));
   return {
-    classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypes,
+    classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypes, tables, monsters,
     pfSubtypesById: Object.fromEntries(pfSubtypes.map((x) => [x.id, x])),
     archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
     classesById: Object.fromEntries(classes.map((c) => [c.id, c])),
@@ -140,7 +146,7 @@ function App() {
   const confirmDiscard = (mode) => !isDirty(mode) || confirm('Há alterações não salvas neste editor. Descartar?');
   const newEntry = (mode) => {
     if (!confirmDiscard(mode)) return;
-    const d = newCreature(mode);
+    const d = newCreature(mode, settings.defaultSystem || 'ffd20');
     setWork((w) => ({ ...w, [mode]: { def: d, saved: null, base: JSON.stringify(d) } }));
   };
   const openEntry = (e) => {

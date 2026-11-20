@@ -26,11 +26,12 @@ export function Bestiary({ app, onOpen }) {
   const [groupBy, setGroupBy] = useState(pref('best:group', 'type'));
   const [mode, setMode] = useState(pref('best:mode', 'all'));
   const [q, setQ] = useState('');
+  const [sys, setSys] = useState(pref('best:sys', 'all'));
   const [view, setView] = useState(null);
   const comp = useComputed(app);
   const save = (k, v, set) => { set(v); try { localStorage.setItem(k, v); } catch { /* ignore */ } };
 
-  const filtered = app.entries.filter((e) => (mode === 'all' || e.mode === mode) && (!q || (e.name || '').toLowerCase().includes(q.toLowerCase()) || (e.tags || []).some((t) => t.toLowerCase().includes(q.toLowerCase()))));
+  const filtered = app.entries.filter((e) => (mode === 'all' || e.mode === mode) && (sys === 'all' || (e.system || 'ffd20') === sys) && (!q || (e.name || '').toLowerCase().includes(q.toLowerCase()) || (e.tags || []).some((t) => t.toLowerCase().includes(q.toLowerCase()))));
   const groups = useMemo(() => {
     const g = {};
     const keyOf = (e) => {
@@ -52,6 +53,7 @@ export function Bestiary({ app, onOpen }) {
     <div class="best-toolbar">
       <input type="search" class="best-search" placeholder="Buscar por nome ou tag…" value=${q} onInput=${(e) => setQ(e.target.value)} />
       <div class="seg">${[['all', 'Todos'], ['monster', 'Monstros'], ['npc', 'NPCs']].map(([k, l]) => html`<button class=${mode === k ? 'on' : ''} onClick=${() => save('best:mode', k, setMode)}>${l}</button>`)}</div>
+      <div class="seg">${[['all', 'Ambos'], ['ffd20', 'FFd20'], ['pf1e', 'Pathfinder']].map(([k, l]) => html`<button class=${sys === k ? 'on' : ''} onClick=${() => save('best:sys', k, setSys)}>${l}</button>`)}</div>
       <label class="inline">Agrupar por <${Select} value=${groupBy} onChange=${(v) => save('best:group', v, setGroupBy)} options=${[['type', 'Tipo'], ['alpha', 'Alfabético'], ['folder', 'Pasta'], ['cr', 'CR']]} /></label>
       <span class="muted">${filtered.length} statblock(s)</span>
     </div>
@@ -76,7 +78,7 @@ function Card({ e, c, onClick }) {
       ${e.boss && e.boss !== 'none' ? html`<span class="card-boss">${{ mini: 'Mini-Boss', boss: 'Boss', super: 'Super Boss' }[e.boss]}</span>` : null}
     </div>
     <div class="card-body"><div class="card-name">${e.name || 'Sem nome'}</div>
-      <div class="card-sub">${e.mode === 'npc' ? 'NPC · ' : ''}${type}${c && c.classes.length ? ` · ${c.classes.map((x) => `${x.def.name} ${x.level}`).join('/')}` : ''}</div></div>
+      <div class="card-sub"><span class="sys-tag ${e.system === 'pf1e' ? 'pf' : 'ff'}">${e.system === 'pf1e' ? 'PF' : 'FF'}</span> ${e.mode === 'npc' ? 'NPC · ' : ''}${type}${c && c.classes.length ? ` · ${c.classes.map((x) => `${x.def.name} ${x.level}`).join('/')}` : ''}</div></div>
   </button>`;
 }
 

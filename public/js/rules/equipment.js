@@ -172,6 +172,6 @@ export function gearSummary(d, db) {
     combat.push(q > 1 ? `${c.name} (${q})` : c.name);
     total += (Number(c.price) || 0) * q;
   }
-  if (Number(eq.gil)) { other.push(`${Number(eq.gil).toLocaleString('en-US')} gil`); total += Number(eq.gil); }
+  if (Number(eq.gil)) { other.push(`${Number(eq.gil).toLocaleString('en-US')} ${d.system === 'pf1e' ? 'gp' : 'gil'}`); total += Number(eq.gil); }
   return { combat, other, total };
 }

@@ -282,3 +282,8 @@ main { flex: 1; padding: 16px 18px; }
 .talent-row { border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent); padding: 4px 0; }
 .arch-row { margin-left: 12px; }
 .cf-row.replaced { opacity: .6; }
+.sys-tag { font-size: 10px; font-weight: 800; letter-spacing: .04em; border-radius: 4px; padding: 0 4px; border: 1px solid currentColor; }
+.sys-tag.ff { color: var(--accent); }
+.sys-tag.pf { color: var(--gold); }
+.system-seg button { padding: 4px 10px; font-size: 12.5px; }
+.el-acid { border-left-color: #9be15d; } .el-cold { border-left-color: #7fd8ff; } .el-electricity { border-left-color: #ffe14d; } .el-sonic { border-left-color: #c3a6ff; }

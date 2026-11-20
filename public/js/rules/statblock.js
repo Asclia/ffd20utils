@@ -32,7 +32,8 @@ export function buildStatblock(d, c, db) {
   section('Defense');
   const acParts = c.ac.parts.map(([v, n]) => `${sign(v)} ${n}`).join(', ');
   line('AC', `${c.ac.ac}, touch ${c.ac.touch}, flat-footed ${c.ac.flat}${acParts ? ` (${acParts})` : ''}${c.ac.notes.length ? `; ${c.ac.notes.join(', ')}` : ''}`);
-  line('hp', `${c.hp.avg} [${c.hp.max}] (${c.hp.expr})${c.hpExtra.length ? `; ${c.hpExtra.join('; ')}` : ''}`);
+  const pf = c.system === 'pf1e';
+  line('hp', `${c.hp.avg}${pf ? '' : ` [${c.hp.max}]`} (${c.hp.expr})${c.hpExtra.length ? `; ${c.hpExtra.join('; ')}` : ''}`);
   if (c.mp.total > 0) line('MP', `${c.mp.total}`);
   line('Fort', `${sign(c.saves.fort)}, <b>Ref</b> ${sign(c.saves.ref)}, <b>Will</b> ${sign(c.saves.will)}${c.saveNotes.length ? `; ${c.saveNotes.join(', ')}` : ''}`);
   const defAbil = c.specialAbilities.filter((a) => a.placement === 'defensive').map((a) => a.short || a.name.toLowerCase());
@@ -47,7 +48,7 @@ export function buildStatblock(d, c, db) {
     c.sr ? `<b>SR</b> ${c.sr}` : '',
   ], '; ');
   if (defLine) B.push({ t: 'plain', text: defLine, html: true });
-  const weak = joinNonEmpty([c.weak.join(', '), d.weaknessesText]);
+  const weak = joinNonEmpty([pf ? c.weak.map((e) => `vulnerability to ${e}`).join(', ') : c.weak.join(', '), d.weaknessesText]);
   line('Weaknesses', weak);
 
   // ---------------- offense
@@ -81,7 +82,20 @@ export function buildStatblock(d, c, db) {
   }
   // spells known
   const spells = (d.caster?.spells || []).filter((x) => x.name);
-  if (spells.length || c.mp.total > 0) {
+  if (pf && c.pfSpells?.length) {
+    // Pathfinder: spells per day by class (bonus spells from the casting ability included)
+    c.pfSpells.forEach((part, i) => {
+      const label = (i === 0 && d.caster?.listName) || `${part.source} Spells ${part.spontaneous ? 'Known' : 'Prepared'}`;
+      B.push({ t: 'plain', text: `<b>${label}</b> (CL ${ordinal(part.cl)}; concentration ${sign(part.cl + (c.abilities[part.ability] === null ? 0 : Math.floor((c.abilities[part.ability] - 10) / 2)))})`, html: true });
+      const mine = spells.filter((x) => !x.classId || x.classId === part.classId || c.pfSpells.length === 1);
+      for (const lv of Object.keys(part.perDay).map(Number).sort((a, b) => b - a)) {
+        const names = mine.filter((x) => Number(x.level) === lv).map((x) => x.name).sort();
+        const dc = 10 + lv + (c.abilities[part.ability] === null ? 0 : Math.floor((c.abilities[part.ability] - 10) / 2));
+        const count = lv === 0 ? 'at will' : part.spontaneous ? `${part.perDay[lv]}/day` : `${part.perDay[lv]}`;
+        B.push({ t: 'indent', text: `${lv === 0 ? '0' : ordinal(lv)} (${count}; DC ${dc})—${names.join(', ')}` });
+      }
+    });
+  } else if (!pf && (spells.length || c.mp.total > 0)) {
     const src = c.mp.parts.map((p) => (p.source.length <= 2 ? p.source : p.source)).join('/');
     const tierAbbr = d.caster?.tier && d.caster.tier !== 'none' ? CASTER_ABBR[d.caster.tier] : '';
     const label = d.caster?.listName || (c.classes.some((x) => x.def.caster) ? `${c.classes.filter((x) => x.def.caster).map((x) => x.def.name).join('/')} Spells Known` : 'Spells Known');

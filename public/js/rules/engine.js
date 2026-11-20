@@ -4,7 +4,7 @@ import {
   ABILITIES, mod, sign, SIZE_DATA, SIZES, babFor, goodSave, poorSave, bonusMP, creatureMP,
   limitBreakUses, burstUses, burstDuration, xpForCR, crLabel, stepDice, avgDice, BOSS_IMMUNITIES, CASTER_ABBR, suggestedHD, statsForCR,
 } from './tables.js';
-import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK } from './types.js';
+import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK, PF_ENERGIES, FF_TO_PF, PF_TYPE_OVERRIDES, PF_SUBTYPE_OVERRIDES } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
 import { featEffect, featKey } from './featEffects.js';
 import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS } from './equipment.js';
@@ -12,16 +12,17 @@ import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS } from './equipm
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 // ------------------------------------------------------------------ data model
-export function newCreature(mode = 'monster') {
+export function newCreature(mode = 'monster', system = 'ffd20') {
   const npc = mode === 'npc';
+  const pf = system === 'pf1e';
   return {
-    id: uid(), mode, name: npc ? 'Novo NPC' : 'Nova Criatura', folderId: null,
+    id: uid(), mode, system, name: npc ? 'Novo NPC' : 'Nova Criatura', folderId: null,
     image: { src: '', kind: '' }, flavor: '', description: '', tags: [],
     cr: npc ? null : 1, crOverride: null, mythic: 0,
     alignment: 'N', size: 'Medium', type: npc ? 'humanoid' : 'magical-beast', subtypes: npc ? [] : [],
-    raceId: npc ? 'hume' : '', raceBonus: 'str',
+    raceId: npc ? (pf ? 'pf-human' : 'hume') : '', raceBonus: 'str',
     racialHD: npc ? 0 : 2, autoHD: !npc, autoNaturalArmor: !npc, hdDie: null, goodSaves: null, swarmExtra: '',
-    classes: npc ? [{ id: uid(), classId: 'warrior', level: 1 }] : [], favored: 'hp',
+    classes: npc ? [{ id: uid(), classId: pf ? 'pf-fighter' : 'warrior', level: 1 }] : [], favored: 'hp',
     abilities: npc ? { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 } : { str: 14, dex: 12, con: 12, int: 4, wis: 10, cha: 8 },
     abilityAdjust: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
     abilityNone: { con: null, int: null },
@@ -38,7 +39,7 @@ export function newCreature(mode = 'monster') {
     elementOverrides: {}, elementResist: {},
     immunities: [], immunitiesRemoved: [],
     dr: '', sr: null, srAuto: false, fastHealing: '', regeneration: '', defensiveText: '', weaknessesText: '',
-    caster: { tier: 'none', ability: 'int', mpBonus: 0, cl: null, spells: [], sla: [], slaCL: null, listName: '' },
+    caster: { tier: 'none', ability: 'int', mpBonus: 0, cl: null, spells: [], sla: [], slaCL: null, listName: '', pfClass: '', pfLevel: 0 },
     classFeatures: {}, limitBreaksEnabled: false, pcWealth: false,
     abilitiesList: [], modifiers: [], equipment: emptyEquipment(), talents: [],
     tactics: { before: '', during: '', morale: '' },
@@ -87,17 +88,32 @@ export function compute(def, db) {
   const race = npc && d.raceId ? ((db.racesById || {})[d.raceId] || (hb.races || []).find((r) => r.id === d.raceId) || null) : null;
   out.race = race;
 
+  // ---- game system: FFd20 (default) or Pathfinder 1e
+  const pf = d.system === 'pf1e';
+  out.system = pf ? 'pf1e' : 'ffd20';
+  const EL = pf ? PF_ENERGIES : ELEMENTS;
+  // element keys from FFd20 sources (subtypes, items) used in a Pathfinder creature become PF energies
+  const elKey = (el) => (pf ? (PF_ENERGIES.includes(el) ? el : FF_TO_PF[el]) : el);
+  const affOf = (v) => (pf ? ({ absorb: 'immune', strong: 'resist' }[v] || v) : v);
+
   // ---- type & subtypes
-  const type = TYPE_BY_ID[d.type] || (hb.types || []).find((t) => t.id === d.type) || TYPE_BY_ID.humanoid;
+  let type = TYPE_BY_ID[d.type] || (hb.types || []).find((t) => t.id === d.type) || TYPE_BY_ID.humanoid;
+  if (pf && PF_TYPE_OVERRIDES[type.id]) {
+    const o = PF_TYPE_OVERRIDES[type.id];
+    type = { ...type, ...o, flags: o.flags ? { ...o.flags, noCon: type.flags?.noCon, constructHP: type.flags?.constructHP } : type.flags };
+  }
   out.type = type;
-  const subtypeDefs = (d.subtypes || []).map((sid) => SUBTYPE_BY_ID[sid] || (hb.subtypes || []).find((s) => s.id === sid) || (db.pfSubtypesById || {})[sid] || { id: sid, name: sid, custom: true });
+  const subtypeDefs = (d.subtypes || []).map((sid) => {
+    const base = SUBTYPE_BY_ID[sid] || (hb.subtypes || []).find((s) => s.id === sid) || (db.pfSubtypesById || {})[sid] || { id: sid, name: sid, custom: true };
+    return pf && PF_SUBTYPE_OVERRIDES[sid] ? { ...base, ...PF_SUBTYPE_OVERRIDES[sid] } : base;
+  });
   if (race) for (const rs of race.subtypes || []) if (!d.subtypes.includes(rs) && !subtypeDefs.find((x) => x.id === rs)) subtypeDefs.unshift(SUBTYPE_BY_ID[rs] || { id: rs, name: rs });
   out.subtypes = subtypeDefs;
   // homebrew races carry subtype-like traits (elements, immunities, senses, modifiers, abilities)
   const traitSources = race && race.homebrew ? [...subtypeDefs, { ...race, name: race.name }] : subtypeDefs;
   const flags = { ...(type.flags || {}) };
   for (const s of subtypeDefs) Object.assign(flags, s.flags || {});
-  const boss = d.boss || 'none';
+  const boss = pf ? 'none' : (d.boss || 'none'); // boss tiers / Burst Mode are FFd20 rules
   const isBossTier = boss === 'boss' || boss === 'super';
   out.boss = boss;
 
@@ -163,7 +179,8 @@ export function compute(def, db) {
   // ---- caster level (for feats like Arcane Strike / Extra MP)
   const casterClasses = classes.filter((c) => c.def.caster);
   let cl = casterClasses.reduce((s, c) => s + Number(c.level), 0);
-  if (d.caster?.tier && d.caster.tier !== 'none') cl = Math.max(cl, hd);
+  if (!pf && d.caster?.tier && d.caster.tier !== 'none') cl = Math.max(cl, hd);
+  if (pf && d.caster?.pfClass && Number(d.caster.pfLevel) > 0) cl = Math.max(cl, Number(d.caster.pfLevel));
   if (d.caster?.cl) cl = Number(d.caster.cl);
   out.cl = cl;
 
@@ -258,9 +275,32 @@ export function compute(def, db) {
   out.hpExtra = [d.fastHealing && `fast healing ${d.fastHealing}`, !d.fastHealing && itemFH[0] && `fast healing ${itemFH[0]}`, d.regeneration && `regeneration ${d.regeneration}`].filter(Boolean);
   if (flags.forceField) out.hpExtra.push(`force field ${hd * 5} hp`);
 
-  // ---- MP & spells
+  // ---- MP & spells (FFd20) / spells per day (Pathfinder)
   const mp = { total: 0, parts: [], maxSL: 0, lines: [] };
-  for (const c of classes) {
+  out.pfSpells = [];
+  if (pf) {
+    const casters = classes.filter((c) => c.def.caster).map((c) => ({ def: c.def, level: Number(c.level) }));
+    const asClass = d.caster?.pfClass && (db.classesById || {})[d.caster.pfClass];
+    if (asClass && Number(d.caster.pfLevel) > 0) casters.push({ def: asClass, level: Number(d.caster.pfLevel), monster: true });
+    for (const c of casters) {
+      const row = c.def.levels[Math.min(c.level, c.def.levels.length) - 1];
+      if (!row || !row.spellsPerDay) continue;
+      const ab = c.def.castingAbility || d.caster?.ability || 'int';
+      const am = abil[ab] === null ? -5 : mod(abil[ab]);
+      const perDay = {};
+      for (const [lv, n] of Object.entries(row.spellsPerDay)) {
+        const L = Number(lv);
+        if (L === 0) { perDay[0] = n; continue; }
+        if (n === 0 && am < L) continue;
+        perDay[L] = n + (am >= L ? Math.floor((am - L) / 4) + 1 : 0); // PF1e bonus spells by ability modifier
+      }
+      const maxSL = Math.max(0, ...Object.keys(perDay).map(Number));
+      out.pfSpells.push({ source: c.def.name, classId: c.def.id, cl: c.level, ability: ab, spontaneous: !!c.def.spontaneous, perDay, maxSL, monster: !!c.monster });
+      mp.maxSL = Math.max(mp.maxSL, maxSL);
+      mp.parts.push({ source: c.def.name, base: 0, bonus: 0, ability: ab, sl: maxSL, cl: c.level });
+    }
+  }
+  for (const c of pf ? [] : classes) {
     if (!c.def.caster) continue;
     const row = c.def.levels[Math.min(c.level, c.def.levels.length) - 1];
     if (!row) continue;
@@ -271,7 +311,7 @@ export function compute(def, db) {
     mp.parts.push({ source: c.def.name, base: row.mp || 0, bonus, ability: ab, sl, cl: Number(c.level) });
     mp.maxSL = Math.max(mp.maxSL, sl);
   }
-  const ct = d.caster?.tier || 'none';
+  const ct = pf ? 'none' : (d.caster?.tier || 'none');
   if (ct !== 'none') {
     const ab = flags.castWis ? 'wis' : (d.caster.ability || 'int');
     const cm = creatureMP(ct, racialHD || hd, isBossTier);
@@ -280,8 +320,10 @@ export function compute(def, db) {
     mp.parts.push({ source: CASTER_ABBR[ct], base: cm.mp, bonus, ability: ab, sl: cm.maxSL, cl: cl });
     mp.maxSL = Math.max(mp.maxSL, cm.maxSL);
   }
-  mp.total += Number(d.caster?.mpBonus) || 0;
-  mp.total += resolveMods(mods.filter((x) => x.target === 'mp'));
+  if (!pf) {
+    mp.total += Number(d.caster?.mpBonus) || 0;
+    mp.total += resolveMods(mods.filter((x) => x.target === 'mp'));
+  }
   out.mp = mp;
   const castAbility = mp.parts[0]?.ability || d.caster?.ability || 'int';
   const dcBonus = resolveMods(mods.filter((x) => x.target === 'spellDC'));
@@ -559,26 +601,27 @@ export function compute(def, db) {
     const cur = elements[src] || '';
     if (AFFINITY_RANK[val] > AFFINITY_RANK[cur] || cur === '') elements[src] = val;
   };
-  for (const [el, v] of Object.entries(type.elements || {})) apply(el, v);
+  const applyFrom = (el, v) => { const k = elKey(el); if (k && EL.includes(k)) apply(k, affOf(v)); };
+  for (const [el, v] of Object.entries(type.elements || {})) applyFrom(el, v);
   for (const st of traitSources) {
-    for (const [el, v] of Object.entries(st.elements || {})) apply(el, v);
-    for (const [el, v] of Object.entries(st.resist || {})) resistAmt[el] = Math.max(resistAmt[el] || 0, v);
+    for (const [el, v] of Object.entries(st.elements || {})) applyFrom(el, v);
+    for (const [el, v] of Object.entries(st.resist || {})) { const k = elKey(el); if (k) resistAmt[k] = Math.max(resistAmt[k] || 0, v); }
   }
-  for (const it of wornItems) for (const el of it.strong || []) if (ELEMENTS.includes(el)) apply(el, 'strong');
+  for (const it of wornItems) for (const el of it.strong || []) applyFrom(el, 'strong');
   // weakness vs immunity from multiple sources: immunity wins (rank)
-  for (const el of ELEMENTS) {
+  for (const el of EL) {
     const o = d.elementOverrides?.[el];
     if (o !== undefined && o !== null && o !== 'inherit') elements[el] = o === 'none' ? '' : o;
     if (d.elementResist?.[el]) resistAmt[el] = Number(d.elementResist[el]);
   }
   out.elements = elements;
   out.elementResist = resistAmt;
-  const byAff = (aff) => ELEMENTS.filter((e) => elements[e] === aff);
+  const byAff = (aff) => EL.filter((e) => elements[e] === aff);
   out.absorb = byAff('absorb');
   out.elemImmune = byAff('immune');
   out.strong = byAff('strong');
   out.weak = byAff('weak');
-  out.resist = ELEMENTS.filter((e) => elements[e] === 'resist' || (resistAmt[e] && !['immune', 'absorb'].includes(elements[e]))).map((e) => `${e} ${resistAmt[e] || 10}`);
+  out.resist = EL.filter((e) => elements[e] === 'resist' || (resistAmt[e] && !['immune', 'absorb'].includes(elements[e]))).map((e) => `${e} ${resistAmt[e] || 10}`);
 
   // ---- immunities
   const imm = new Set();
@@ -715,7 +758,7 @@ export function compute(def, db) {
 }
 
 
-const HIDDEN_FEATURES = /^(weapon and armor proficiency|spells?|cantrips|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|.* talents?$|.*arcana$)/i;
+const HIDDEN_FEATURES = /^(weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
 function normFeat(n) {
   return String(n).replace(/\s*\(.*?\)/g, '').replace(/\s+[+-]?\d+(d\d+)?$/, '').replace(/\s+(I|II|III|IV|V)$/, '').trim().toLowerCase();
 }
