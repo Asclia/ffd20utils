@@ -200,6 +200,15 @@ def parse_pf_spell_list(fname, s):
     levels = [int(x) for x in re.findall(r'\d', head)]
     first_tab = s.find('Spell Name')
     third = s.find('Third Party', first_tab) if first_tab > 0 else -1
+    # the level of each table comes from the heading just before it ("0-Level Cleric/Oracle Spells (Orisons)")
+    body = s[:third] if third > 0 else s
+    by_heading = []
+    for m in re.finditer(r'Spell Name', body):
+        pre = re.sub(r'<[^>]+>', ' ', body[max(0, m.start() - 900):m.start()])
+        hm = re.findall(r'(\d)(?:st|nd|rd|th)?\s*[-–]\s*[Ll]evel', pre)
+        by_heading.append(int(hm[-1]) if hm else None)
+    if by_heading and all(x is not None for x in by_heading):
+        levels = by_heading
     out = []
     pos = 0
     for i, t in enumerate(tables(s[:third] if third > 0 else s)):
@@ -218,7 +227,7 @@ def parse_pf_spell_list(fname, s):
             if not re.match(r'^(PZO|PAP|PRG|PCS|PPC|PAC|PMWI|AP|PFS|Pathfinder|Core|APG|UM|UC|ARG|ACG|OA|UI|UW|HA|MA)', src):
                 continue
             for c in classes:
-                out.append({'name': row[0].strip(), 'level': lv, 'class': c, 'summary': row[-2].strip()[:200], 'system': 'pf1e'})
+                out.append({'name': row[0].strip(), 'level': lv, 'class': c, 'summary': row[-2].strip()[:200], 'book': src.strip()[:12], 'system': 'pf1e'})
     return out
 
 

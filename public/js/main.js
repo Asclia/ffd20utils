@@ -30,9 +30,10 @@ const Emblem = () => html`<svg viewBox="0 0 64 64" aria-hidden="true">
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [ffClasses, feats, ffSpells, ffRaces, talentsByClass, archetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters] = await Promise.all(
+  const [ffClasses, feats, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes] = await Promise.all(
     ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json',
-      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json'].map(get));
+      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json'].map(get));
+  const archetypes = [...ffArchetypes, ...pfArchetypes];
   // Pathfinder subtypes not already defined with rules in types.js
   const pfSubtypes = pfSubtypesRaw.filter((x) => !SUBTYPE_BY_ID[x.id]).map((x) => ({ id: x.id, name: x.name, traits: x.text, pf: true }));
   // Both systems share one database; Pathfinder class ids get a "pf-" prefix (bard, cleric… exist in both)

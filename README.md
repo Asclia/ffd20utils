@@ -46,6 +46,17 @@ padrão para novas fica em *Biblioteca → Configurações*). No Pathfinder entr
 magias do PF1e (d20pfsrd), energias no lugar dos elementos do FF, magias por dia no lugar de MP e sem
 regras de chefe/Limit Break.
 
+## Montagem automática de NPC
+
+Na seção **⚡ Montagem automática** do editor de NPC, escolha o papel (detectado pela classe: combatente,
+defensor com escudo, esgrimista, atirador, especialista, lutador desarmado ou conjurador) e clique em
+**Montar NPC**. O programa preenche atributos (array heroico/básico do FFd20, +2 racial e +1 a cada 4 níveis
+no atributo principal), perícias (graduações nas perícias de classe do papel), feats (respeitando
+pré-requisitos, com feats bônus de classe marcados), magias (conhecidas no FFd20; por dia/conhecidas no PF1e,
+priorizando os livros básicos) e equipamento (arma, armadura, escudo, itens mágicos e poções dentro da tabela de
+riqueza de NPC). **🎲 Outra variação** sorteia outras escolhas e **+ nível e remontar** sobe o nível. Feats
+personalizados e de homebrew são mantidos; tudo continua editável.
+
 ## Aparência
 
 O botão **🎨 Aparência** no topo escolhe o tema (Arcano, Pergaminho, Élfico, Dracônico, Cristal,
@@ -113,11 +124,11 @@ python3 tools/build_data.py ./cache
 ```
 
 Tabelas aleatórias e listas de masmorra (`tables.json`, `monsters.json`) vêm de `tools/build_tables.py`;
-as classes, raças e magias do Pathfinder de `tools/build_pf.py`. Licenças:
+as classes, raças e magias do Pathfinder de `tools/build_pf.py`; os arquétipos do Pathfinder (1.168, do Archives of Nethys) de `tools/build_pf_archetypes.py`. Licenças:
 
 - **Maze Rats** © Ben Milton — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Ironsworn: Delve** © Shawn Tomkin — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (via Datasworn).
-- **Pathfinder** (classes, raças, magias, armadilhas, lista de monstros) — Open Game License 1.0a, via d20pfsrd.com e aonprd.com.
+- **Pathfinder** (classes, raças, magias, arquétipos, armadilhas, lista de monstros) — Open Game License 1.0a, via d20pfsrd.com e aonprd.com.
 - Fontes **Cinzel**, **Cinzel Decorative**, **Alegreya Sans** e **EB Garamond** — SIL Open Font License (`public/fonts`).
 
 As tabelas de criação (CR, HD por tipo, MP de criaturas, bônus de MP, riqueza de NPC, chefes) ficam

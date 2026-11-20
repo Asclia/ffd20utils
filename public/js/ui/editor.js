@@ -13,6 +13,7 @@ import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGET
 import { exportMarkdown } from '../export.js';
 import { EquipmentSection } from './equipment.js';
 import { TalentsSection } from './talents.js';
+import { autoBuild, detectRole, ROLES, PARTS, mainClass } from '../rules/autobuild.js';
 
 const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
 const KINDS = [['Ex', 'Ex'], ['Su', 'Su'], ['Sp', 'Sp'], ['', '—']];
@@ -51,6 +52,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
         <${IdentitySection} def=${def} up=${up} folders=${folders} app=${app} />
         ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} homebrew=${homebrew} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} db=${db} />`}
         <${ClassesSection} def=${def} up=${up} db=${db} c=${c} npc=${npc} homebrew=${homebrew} />
+        ${npc || c.classes.length ? html`<${AutoBuildSection} def=${def} setDef=${setDef} c=${c} db=${{ ...db, homebrew }} npc=${npc} />` : null}
         <${TalentsSection} def=${def} up=${up} c=${c} />
         <${AbilitiesSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
         <${DefenseSection} def=${def} up=${up} upIn=${upIn} c=${c} />
@@ -208,7 +210,7 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
       empty=${npc ? 'Adicione ao menos uma classe.' : 'Monstros normalmente não têm classes; adicione se quiser um monstro com níveis de classe.'}
       render=${(it, set) => {
         const cd = allClasses.find((x) => x.id === it.classId);
-        const archList = db.archetypes.filter((a) => a.classId === it.classId);
+        const archList = db.archetypes.filter((a) => a.classId === it.classId || (it.classId.endsWith('-unchained') && a.classId === it.classId.replace(/-unchained$/, '')));
         const chosenArch = (it.archetypes || []).map((id) => db.archetypesById[id]).filter(Boolean);
         const overlaps = archOverlap(chosenArch);
         return html`<div><div class="row wrap">
@@ -241,6 +243,52 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
         </${Field}>` : html`
         <${Field} label="Limit Breaks"><${Check} label="Usa Limit Breaks das classes" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
     </div>
+  </${Section}>`;
+}
+
+// ------------------------------------------------------------------ automatic build
+function AutoBuildSection({ def, setDef, c, db, npc }) {
+  const detected = detectRole(c);
+  const role = def.autoRole && ROLES[def.autoRole] ? def.autoRole : '';
+  const caster = c.classes.some((x) => x.def.caster);
+  const [parts, setParts] = useState(() => PARTS.map((p) => p[0]).filter((p) => npc || p !== 'equipment'));
+  const [seed, setSeed] = useState(1);
+  const main = mainClass(c);
+  const run = (opts = {}) => {
+    const has = def.feats.length || Object.keys(def.skills || {}).length || def.attacks.some((a) => !a.natural) || def.caster?.spells?.length;
+    if (has && !opts.silent && !confirm('A montagem automática substitui as partes marcadas (feats personalizados e de homebrew são mantidos). Continuar?')) return;
+    const s = opts.seed ?? seed;
+    setDef((d) => {
+      const base = opts.level ? { ...d, classes: d.classes.map((x) => (x.id === main?.id ? { ...x, level: Math.max(1, Math.min(x.level + opts.level, 20)) } : x)) } : d;
+      const r = autoBuild(base, db, { role: role || undefined, parts: parts.filter((p) => p !== 'spells' || caster), seed: s });
+      return { ...r.def, autoRole: role };
+    });
+    if (!opts.silent) toast('NPC montado. Tudo continua editável.');
+  };
+  const reroll = () => { const s = seed + 1; setSeed(s); run({ seed: s, silent: true }); };
+  const togglePart = (p, v) => setParts(v ? [...parts, p] : parts.filter((x) => x !== p));
+  return html`<${Section} title="⚡ Montagem automática" id="autobuild" open=${npc}>
+    <div class="muted small">Preenche o ${npc ? 'NPC' : 'personagem'} a partir da raça, das classes e de um papel em combate, seguindo o guia de NPCs do FFd20
+      (arrays de atributos, +1 a cada 4 níveis, equipamento pela tabela de riqueza de NPC) e as regras do PF1e (feats com pré-requisitos, feats bônus de classe, magias por dia e conhecidas).</div>
+    <div class="grid">
+      <${Field} label="Papel" wide>
+        <${Select} value=${role} onChange=${(v) => setDef((d) => ({ ...d, autoRole: v }))}
+          options=${[['', `Automático: ${ROLES[detected].label}`], ...Object.entries(ROLES).map(([k, v]) => [k, v.label])]} />
+      </${Field}>
+      <${Field} label="O que montar" wide>
+        <div class="row wrap">${PARTS.map(([k, l]) => html`<${Check} label=${l} checked=${parts.includes(k) && (k !== 'spells' || caster)}
+          onChange=${(v) => togglePart(k, v)} title=${k === 'spells' && !caster ? 'Nenhuma classe conjuradora' : ''} />`)}</div>
+      </${Field}>
+    </div>
+    <div class="row wrap">
+      <button class="btn primary" onClick=${() => run()} disabled=${!c.classes.length}>⚡ Montar ${npc ? 'NPC' : 'níveis'}</button>
+      <button class="btn" onClick=${reroll} disabled=${!c.classes.length} title="Outras magias e escolhas aleatórias">🎲 Outra variação</button>
+      ${main ? html`<span class="spacer"></span>
+        <button class="btn small" onClick=${() => run({ level: -1, silent: true })} disabled=${main.level <= 1}>− nível</button>
+        <span class="muted small">${main.def.name} ${main.level}</span>
+        <button class="btn small" onClick=${() => run({ level: 1, silent: true })} disabled=${main.level >= (main.def.maxLevel || 20)}>+ nível e remontar</button>` : null}
+    </div>
+    ${!c.classes.length ? html`<div class="small warn">Adicione uma classe primeiro.</div>` : null}
   </${Section}>`;
 }
 
