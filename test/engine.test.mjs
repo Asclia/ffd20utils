@@ -173,7 +173,7 @@ t('Equipment: magic weapon, armor, belt, ring, gear lines (Fran-like archer)', (
   assert.equal(c.abilities.dex, 15 + 2 + 2 + 4);   // base + viera + level + belt
   assert.equal(c.ac.ac, 10 + 5 + 6 + 2);            // +5 armor, +6 Dex, +2 deflection
   assert.ok(c.ac.parts.some(([v, n]) => v === 2 && n === 'deflection'));
-  assert.equal(c.attackDetails[0].att, 7 + 6 + 3); // BAB +7 (archer 10), Dex +6, +3 bow
+  assert.equal(c.attackDetails[0].att, 7 + 6 + 3 + 2); // BAB +7 (archer 10), Dex +6, +3 bow, Expert Archer +2
   const md = statblockMarkdown(buildStatblock(d, c, db), d, c);
   assert.match(md, /\*\*Combat Gear\*\* Hi-Potion \(2\)/);
   assert.match(md, /\*\*Other Gear\*\* \+3 longbow, \+3 leather, Belt of Incredible Dexterity \+4, Ring of Protection \+2/);

@@ -125,7 +125,7 @@ export function buildStatblock(d, c, db) {
   B.push({ t: 'plain', text: ABILITIES.map((a) => `<b>${ABILITY_NAMES[a]}</b> ${c.abilities[a] === null ? '—' : c.abilities[a]}`).join(', '), html: true });
   const cmdN = c.cmdNotes.length ? ` (${c.cmdNotes.join(', ')})` : '';
   B.push({ t: 'plain', text: `<b>Base Atk</b> ${sign(c.bab)}; <b>CMB</b> ${sign(c.cmb)}; <b>CMD</b> ${c.cmd}${cmdN}`, html: true });
-  const feats = (d.feats || []).map((f) => `${f.name}${f.param ? ` (${f.param})` : ''}${f.bonus ? '<sup>B</sup>' : ''}`).sort((a, b) => a.localeCompare(b));
+  const feats = (c.feats || d.feats || []).map((f) => `${f.name}${f.param ? ` (${f.param})` : ''}${f.bonus ? '<sup>B</sup>' : ''}`).sort((a, b) => a.localeCompare(b));
   if (feats.length) B.push({ t: 'plain', text: `<b>Feats</b> ${feats.join(', ')}`, html: true });
   const sk = c.skills.filter((s) => s.show).map((s) => `${s.name} ${sign(s.total)}`);
   if (sk.length) B.push({ t: 'plain', text: `<b>Skills</b> ${sk.join(', ')}${d.racialSkillMods ? `; <b>Racial Modifiers</b> ${d.racialSkillMods}` : ''}`, html: true });

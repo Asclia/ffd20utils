@@ -2,12 +2,14 @@
 // computed statistics (what the stat block shows). Pure functions, no DOM.
 import {
   ABILITIES, mod, sign, SIZE_DATA, SIZES, babFor, goodSave, poorSave, bonusMP, creatureMP,
-  limitBreakUses, burstUses, burstDuration, xpForCR, crLabel, stepDice, avgDice, BOSS_IMMUNITIES, CASTER_ABBR, suggestedHD, statsForCR,
+  limitBreakUses, burstUses, burstDuration, xpForCR, crLabel, stepDice, avgDice, BOSS_IMMUNITIES, CASTER_ABBR, suggestedHD, statsForCR, scaleDiceForSize,
 } from './tables.js';
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK, PF_ENERGIES, FF_TO_PF, PF_TYPE_OVERRIDES, PF_SUBTYPE_OVERRIDES } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
 import { featEffect, featKey } from './featEffects.js';
-import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS } from './equipment.js';
+import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS } from './equipment.js';
+import { raceTraitEffects } from './raceEffects.js';
+import { applyClassEffects, classBonusFeatSlots, grantedFeats, archetypeClassSkills, effectKey } from './classEffects.js';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -126,6 +128,10 @@ export function compute(def, db) {
   const addMod = (m) => mods.push(m);
   for (const m of d.modifiers || []) if (m.enabled !== false && m.target) addMod({ ...m, value: Number(m.value) || 0, source: m.note || 'custom' });
   for (const s of traitSources) for (const m of s.mods || []) addMod({ ...m, value: Number(m.value) || 0, source: s.name });
+  // racial traits from the race pages (skills, saves, AC, immunities); homebrew races use their own modifiers
+  const raceFx = race && !race.homebrew ? raceTraitEffects(race) : { mods: [], immune: [] };
+  for (const m of raceFx.mods) addMod(m);
+  out.raceEffects = raceFx;
   // ---- equipment (body slots + slotless): modifiers, immunities, granted feats, weapon riders
   const eq = d.equipment || emptyEquipment();
   const wornItems = [...SLOTS.map(([k]) => eq.slots?.[k]), ...(eq.slots ? [] : []), ...(eq.slotless || [])].filter((x) => x && x.name && x.active !== false);
@@ -187,6 +193,42 @@ export function compute(def, db) {
   // ---- skills ranks helper (needed by feats)
   const skillRanks = (name) => Number(d.skills?.[name]) || 0;
 
+  // ---- active class features (archetype swaps applied) → automatic effects, granted feats
+  const activeFeatures = [];
+  for (const c of classes) {
+    const lvl = Number(c.level);
+    const latest = {};
+    for (const r of c.def.levels.slice(0, lvl)) for (const sp of r.special || []) latest[normFeat(sp)] = sp;
+    const archs = (c.archetypes || []).map((id) => (db.archetypesById || {})[id]).filter(Boolean);
+    const replaced = [];
+    for (const a of archs) for (const f of a.features || []) if (f.level <= lvl) for (const r of f.replaces || []) replaced.push(normFeat(r));
+    const isReplaced = (name) => { const n = normFeat(name); return replaced.some((k) => k && (n === k || (n.length > 3 && (k.startsWith(n) || n.startsWith(k))))); };
+    for (const f of c.def.features || []) if (f.level <= lvl && !(archs.length && isReplaced(f.name))) activeFeatures.push({ cls: c.def, f, L: lvl, value: latest[normFeat(f.name)] || findLatest(latest, f.name) });
+    for (const a of archs) for (const f of a.features || []) if (f.level <= lvl) activeFeatures.push({ cls: c.def, f: { ...f, archetype: a.name }, L: lvl, value: '' });
+  }
+  out.activeFeatures = activeFeatures;
+  const armorDef = eq.armor?.name ? ARMORS.find((x) => x.name === String(eq.armor.name).toLowerCase()) : null;
+  const legacyArmor = (d.armor || []).find((x) => (x.kind || 'armor') === 'armor');
+  const armorType = armorDef ? armorDef.type : eq.armor?.name ? (Number(eq.armor.bonus) >= 7 ? 'heavy' : Number(eq.armor.bonus) >= 4 ? 'medium' : 'light')
+    : legacyArmor ? (Number(legacyArmor.bonus) >= 7 ? 'heavy' : Number(legacyArmor.bonus) >= 4 ? 'medium' : 'light') : 'none';
+  const hasShield = !!eq.shield?.name || (d.armor || []).some((x) => x.kind === 'shield');
+  out.armorType = armorType;
+  const toggles = d.toggles || {};
+  const cfx0 = { m, bab, hd, armor: armorType, shield: hasShield, ff: !pf };
+  const cfAbil = applyClassEffects({ features: activeFeatures, stage: 'abilities', x0: cfx0, toggles });
+  for (const mm of cfAbil.mods) addMod(mm);
+  // feats granted by class features (Improved Unarmed Strike for monks, Endurance, Mobility…)
+  const featNames = new Set();
+  for (const f of db.feats || []) {
+    const n = f.name.toLowerCase().replace(/\s*\(.*?\)\s*$/, '');
+    featNames.add(n);
+    const inv = /^(.+), (improved|greater|lesser|mythic)$/.exec(n); // index form "Unarmed Strike, Improved"
+    if (inv) featNames.add(`${inv[2]} ${inv[1]}`);
+  }
+  for (const n of ['improved unarmed strike', 'endurance', 'diehard', 'track', 'alertness', 'improved initiative', 'deflect arrows', 'stunning fist', 'mobility', 'combat reflexes', 'run', 'throw anything', 'catch off-guard', 'eschew materials', 'brew potion', 'scribe scroll', 'martial weapon proficiency']) featNames.add(n);
+  const autoFeats = grantedFeats(classes.map((c) => c), activeFeatures, featNames)
+    .filter((f) => !(d.feats || []).some((u) => featKey(u.name) === featKey(f.name)));
+
   // ---- feats: collect modifiers & attack hooks
   const featFlags = {};
   const featAttackHooks = [];
@@ -194,7 +236,7 @@ export function compute(def, db) {
   const seen = {};
   out.feats = [];
   const itemFeats = wornItems.flatMap((it) => (it.feats || []).map((name) => ({ id: `item:${it.id}:${name}`, name, fromItem: it.name })));
-  for (const f of [...(d.feats || []), ...itemFeats]) {
+  for (const f of [...(d.feats || []), ...itemFeats, ...autoFeats]) {
     const key = featKey(f.name);
     const eff = featEffect(f.name) || (hb.feats || []).find((h) => featKey(h.name) === key);
     const toggleOn = !!(d.toggles || {})[f.id || key];
@@ -213,6 +255,14 @@ export function compute(def, db) {
   for (const a of ABILITIES) if (abil[a] !== null) abil[a] += abilityModsFrom(a);
   recomputeMods();
   ctx.m = m;
+  // class features with numeric effects (armor training, bravery, monk AC bonus, rage…)
+  const cfx = applyClassEffects({ features: activeFeatures, stage: 'rest', x0: { ...cfx0, m }, toggles });
+  for (const mm of cfx.mods) addMod(mm);
+  for (const h of cfx.hooks) featAttackHooks.push({ eff: { attack: (c0, ax) => h.fn(ax, d.attacks || [], h.x) }, f: { name: h.source }, on: true });
+  Object.assign(featFlags, cfx.flags);
+  out.classEffectNotes = cfx.notes;
+  out.combatToggles = [...cfAbil.toggles, ...cfx.toggles];
+  out.classImmunities = cfx.immune;
   const conLike = flags.chaForCon || type.id === 'undead' ? m.cha : (abil.con === null ? 0 : m.con);
   out.conLike = conLike;
 
@@ -357,6 +407,13 @@ export function compute(def, db) {
     if (it.maxDex !== '' && it.maxDex !== null && it.maxDex !== undefined) maxDex = Math.min(maxDex, Number(it.maxDex));
     acp += Math.max(0, (Number(it.acp) || 0) - (it.masterwork || Number(it.enh) ? 1 : 0));
   }
+  // armor training and similar: higher max Dex and lower armor check penalty while wearing armor
+  if (armorType !== 'none') {
+    const md = mods.filter((x) => x.target === 'maxDex' && !x.cond).reduce((a, x) => Math.max(a, x.value), 0);
+    if (md && Number.isFinite(maxDex)) maxDex += md;
+    const red = mods.filter((x) => x.target === 'acp' && !x.cond).reduce((a, x) => Math.max(a, x.value), 0);
+    acp = Math.max(0, acp - red);
+  }
   armorBonus = Math.max(armorBonus, ...acMods.filter((x) => x.type === 'armor-item').map((x) => x.value), 0);
   const armorFeat = acMods.filter((x) => x.type === 'armor-feat' || x.type === 'armor-feat2').reduce((s, x) => s + x.value, 0);
   const shieldFeat = acMods.filter((x) => x.type === 'shield-feat' || x.type === 'shield-feat2').reduce((s, x) => s + x.value, 0);
@@ -466,6 +523,7 @@ export function compute(def, db) {
           att += r.att || 0;
           dmg += r.dmg || 0;
           if (r.doubleThreat) critRange = 21 - (21 - critRange) * 2;
+          if (r.dice) ax._dice = r.dice;
           diceSteps += r.diceSteps || 0;
           extraAttacks += r.extraAttacks || 0;
         }
@@ -474,7 +532,7 @@ export function compute(def, db) {
           if (a.hands === 'off') att += featFlags.twf ? (offLight ? -2 : -4) : (offLight ? -8 : -10);
           else att += featFlags.twf ? (offLight ? -2 : -4) : (offLight ? -4 : -6);
         }
-        const dice = stepDice(a.dice, diceSteps);
+        const dice = stepDice(ax._dice ? scaleDiceForSize(ax._dice, 'Medium', size) : a.dice, diceSteps);
         // attack sequence
         let seq = [att];
         if (!a.natural && a.iterative !== false && a.hands !== 'off') {
@@ -537,11 +595,15 @@ export function compute(def, db) {
   // ---- skills
   const classSkillList = [...(type.classSkills || [])];
   for (const c of classes) classSkillList.push(...(c.def.classSkills || []));
+  const archSkills = archetypeClassSkills(activeFeatures, SKILLS.map((x) => x.name));
+  classSkillList.push(...archSkills.add);
+  for (const r of archSkills.remove) { const i = classSkillList.findIndex((x) => x.toLowerCase() === r.toLowerCase()); if (i >= 0) classSkillList.splice(i, 1); }
+  out.archetypeSkills = archSkills;
   out.skillPoints = {
     available: racialHD * Math.max(1, (flags.skillPts || type.skillPts || 2) + m.int) +
       classes.reduce((s, c) => s + Number(c.level) * Math.max(1, (c.def.skillPoints || 2) + m.int), 0) +
       (d.favored === 'skill' && classes[0] ? Number(classes[0].level) : 0) +
-      (race && (race.id === 'hume' || race.bonusSkillRanks) ? hd : 0),
+      (race && (race.id === 'hume' || race.bonusSkillRanks || raceFx.bonusSkillRanks) ? hd : 0),
     used: Object.values(d.skills || {}).reduce((s, v) => s + (Number(v) || 0), 0),
     maxRanks: hd,
   };
@@ -569,8 +631,21 @@ export function compute(def, db) {
   out.perception = perception ? perception.total : m.wis;
 
   // ---- feats budget
-  out.featBudget = 1 + Math.floor(Math.max(0, hd - 1) / 2) + (race && (['hume', 'half-breed'].includes(race.id) || race.bonusFeat) ? 1 : 0);
-  out.featsTaken = (d.feats || []).filter((f) => !f.bonus).length;
+  out.featBudget = 1 + Math.floor(Math.max(0, hd - 1) / 2) + (race && (['hume', 'half-breed'].includes(race.id) || race.bonusFeat || raceFx.bonusFeat) ? 1 : 0);
+  // class bonus feats (fighter, monk, ranger combat style…) add slots: feats marked "bônus" fill them first,
+  // and any general feat beyond the normal limit spills into a free bonus slot
+  const bonusSlots = classBonusFeatSlots(classes);
+  out.bonusFeatBudget = bonusSlots.n;
+  out.bonusFeatSources = bonusSlots.per;
+  const userFeats = (d.feats || []);
+  const markedBonus = userFeats.filter((f) => f.bonus).length;
+  const general = userFeats.filter((f) => !f.bonus).length;
+  const freeBonus = Math.max(0, bonusSlots.n - markedBonus);
+  out.featsGeneral = general;
+  out.featsTaken = Math.max(0, general - freeBonus);
+  out.featSlotsUsed = general + Math.min(markedBonus, bonusSlots.n);
+  out.featSlotsTotal = out.featBudget + bonusSlots.n;
+  out.autoFeats = autoFeats;
 
   // ---- senses
   const senses = new Set();
@@ -629,6 +704,8 @@ export function compute(def, db) {
   for (const st of traitSources) for (const x of st.immunities || []) imm.add(x);
   if (isBossTier) for (const x of BOSS_IMMUNITIES) if (!(boss === 'super' && x === 'stun')) imm.add(x);
   for (const it of wornItems) for (const x of it.immunities || []) imm.add(x);
+  for (const x of out.classImmunities || []) imm.add(x);
+  for (const x of raceFx.immune || []) imm.add(x);
   for (const x of d.immunities || []) imm.add(x);
   for (const x of d.immunitiesRemoved || []) imm.delete(x);
   if (imm.has('death effects')) imm.delete('death');
@@ -707,7 +784,7 @@ export function compute(def, db) {
       const placement = ov.placement || (hiddenDefault ? 'hidden' : guessPlacement(f));
       const latest = f.archetype ? '' : (latestValue[normFeat(f.name)] || findLatest(latestValue, f.name));
       const value = latest ? (latest.match(/\(([^)]*)\)|\s([+-]?\d+d?\d*)$/) || [])[1] || (latest.match(/\s([+-]?\d+d?\d*)$/) || [])[1] : '';
-      const entry = { key: f.key, classId: c.def.id, className: c.def.name, archetype: f.archetype || '', name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText };
+      const entry = { key: f.key, classId: c.def.id, className: c.def.name, archetype: f.archetype || '', name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText, auto: (out.classEffectNotes || {})[`${c.def.id}:${f.name}`] || '' };
       out.classFeatureList.push(entry);
       if (placement !== 'hidden') abilities.push({ name: f.name, kind: f.type, placement, short: `${f.name.toLowerCase()}${value ? ` (${value})` : ''}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
     }
@@ -752,13 +829,13 @@ export function compute(def, db) {
   // ---- warnings
   if (out.skillPoints.used > out.skillPoints.available && abil.int !== null) out.warnings.push(`Graduações de perícia: ${out.skillPoints.used} usadas de ${out.skillPoints.available} disponíveis.`);
   for (const [n, r] of Object.entries(d.skills || {})) if (Number(r) > hd) out.warnings.push(`${n}: ${r} graduações excede o total de HD (${hd}).`);
-  if (out.featsTaken > out.featBudget) out.warnings.push(`Feats: ${out.featsTaken} escolhidos, ${out.featBudget} disponíveis pelo HD (marque feats de classe como "bônus").`);
+  if (out.featsTaken > out.featBudget) out.warnings.push(`Feats: ${out.featSlotsUsed} escolhidos, ${out.featSlotsTotal} vagas (${out.featBudget} pelo HD${out.bonusFeatBudget ? ` + ${out.bonusFeatBudget} bônus de classe` : ''}).`);
   if (hd < 1) out.warnings.push('A criatura precisa de pelo menos 1 HD (racial ou de classe).');
   return out;
 }
 
 
-const HIDDEN_FEATURES = /^(weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
+const HIDDEN_FEATURES = /^(damage reduction|weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
 function normFeat(n) {
   return String(n).replace(/\s*\(.*?\)/g, '').replace(/\s+[+-]?\d+(d\d+)?$/, '').replace(/\s+(I|II|III|IV|V)$/, '').trim().toLowerCase();
 }

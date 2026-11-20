@@ -68,6 +68,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
       </div>
       <aside class="ed-preview">
         ${c.warnings.length ? html`<div class="warnings">${c.warnings.map((w) => html`<div>⚠ ${w}</div>`)}</div>` : null}
+        <${CombatStates} def=${def} c=${c} up=${up} />
         <div class="sb-wrap" dangerouslySetInnerHTML=${{ __html: sbHTML }}></div>
         ${!npc ? html`<${CRAnalysis} def=${def} c=${c} />` : html`<${NpcWealth} def=${def} c=${c} />`}
       </aside>
@@ -244,6 +245,25 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
         <${Field} label="Limit Breaks"><${Check} label="Usa Limit Breaks das classes" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
     </div>
   </${Section}>`;
+}
+
+// ------------------------------------------------------------------ combat states (rage, stances, Power Attack…)
+function CombatStates({ def, c, up }) {
+  const featToggles = (def.feats || []).map((f) => ({ f, eff: featEffect(f.name) })).filter((x) => x.eff?.toggle).map(({ f, eff }) => ({ key: f.id, label: eff.toggle.replace(/^Aplicar /, '') }));
+  const all = [...(c.combatToggles || []), ...featToggles];
+  if (!all.length) return null;
+  const set = (key, v) => {
+    const t = { ...(def.toggles || {}), [key]: v };
+    // stances of the same feature are exclusive (Sword Oath / Shield Oath)
+    if (v && key.startsWith('cf:')) { const base = key.split(':').slice(0, 3).join(':'); for (const k of Object.keys(t)) if (k !== key && k.startsWith(`${base}:`)) t[k] = false; }
+    up({ toggles: t });
+  };
+  return html`<div class="panel combat-states">
+    <h4>Estados de combate</h4>
+    <div class="row wrap">${all.map((x) => html`<label class="state-chip ${def.toggles?.[x.key] ? 'on' : ''}" title=${x.className ? `${x.className}: ${x.feature}` : ''}>
+      <input type="checkbox" checked=${!!def.toggles?.[x.key]} onChange=${(e) => set(x.key, e.currentTarget.checked)} /> ${x.label}</label>`)}</div>
+    <div class="muted small">O statblock mostra os valores com os estados marcados (no PF1e, normalmente fora de fúria/postura).</div>
+  </div>`;
 }
 
 // ------------------------------------------------------------------ automatic build
@@ -493,15 +513,24 @@ function FeatsSection({ def, up, c, db, homebrew }) {
     }
     const bab = p.match(/(?:base attack bonus|BAB)\s*\+(\d+)/i);
     if (bab && c.bab < Number(bab[1])) issues.push(`BAB +${bab[1]}`);
-    const names = new Set(def.feats.map((x) => featKey(x.name)));
+    const names = new Set([...def.feats, ...(c.autoFeats || [])].map((x) => featKey(x.name)));
+    if (c.featFlags?.finesse) names.add('weapon finesse');
+    for (const m of p.matchAll(/(\w[\w -]*?) level (\d+)(?:st|nd|rd|th)?/gi)) { // "fighter level 4th", "caster level 5th"
+      const who = m[1].trim().toLowerCase().split(' ').pop();
+      const need = Number(m[2]);
+      const have = who === 'caster' ? c.cl : who === 'character' ? c.hd : c.classes.filter((x) => x.def.name.toLowerCase().includes(who)).reduce((sum, x) => sum + x.level, 0);
+      if (have < need) issues.push(`${m[1].trim()} level ${need}`);
+    }
     for (const part of p.split(/,|;/)) {
       const k = featKey(part.replace(/\bfeat\b/i, ''));
-      if (k && all.some((x) => featKey(x.name) === k && x.name.length > 3) && !names.has(k) && !/^(str|dex|con|int|wis|cha|bab|base|caster|character|spellcaster|proficiency)/i.test(k)) issues.push(part.trim());
+      if (k && all.some((x) => featKey(x.name) === k && x.name.length > 3) && !names.has(k) && !/^(str|dex|con|int|wis|cha|bab|base|caster|character|spellcaster|proficiency)/i.test(k) && !/\blevel\b/i.test(part)) issues.push(part.trim());
     }
     return issues.length ? `Pré-requisitos não atendidos: ${issues.join(', ')}` : '';
   };
-  return html`<${Section} title="Feats" id="feats" badge=${`${c.featsTaken}/${c.featBudget}`}>
-    <div class="muted small">Feats disponíveis pelo HD: ${c.featBudget} (1 + 1 a cada 2 HD após o 1º${c.race && ['hume', 'half-breed'].includes(c.race.id) ? ' + 1 racial' : ''}). Feats marcados como "bônus" (de classe) não contam. Feats com ⚙ são calculados automaticamente.</div>
+  return html`<${Section} title="Feats" id="feats" badge=${`${c.featSlotsUsed}/${c.featSlotsTotal}`}>
+    <div class="muted small">Vagas: <b>${c.featBudget}</b> pelo HD (1 + 1 a cada 2 HD após o 1º${c.featBudget > 1 + Math.floor(Math.max(0, c.hd - 1) / 2) ? ', +1 racial' : ''})${c.bonusFeatBudget ? html` + <b>${c.bonusFeatBudget}</b> bônus de classe (${c.bonusFeatSources.map((x) => `${x.className} ${x.n}`).join(', ')}) — feats além do limite normal ocupam as vagas bônus automaticamente` : ''}.
+      Marque "bônus" para feats que vêm de outra fonte e não devem contar. Feats com ⚙ são calculados automaticamente.</div>
+    ${c.autoFeats?.length ? html`<div class="row wrap small"><span class="muted">Concedidos automaticamente:</span>${c.autoFeats.map((f) => html`<span class="chip" title=${`Concedido por ${f.source}`}>${featEffect(f.name) ? '⚙ ' : ''}${f.name} <small class="muted">(${f.source})</small></span>`)}</div>` : null}
     <${ListEditor} items=${def.feats} onChange=${(v) => up({ feats: v })} empty="Nenhum feat."
       render=${(f, set) => {
         const eff = featEffect(f.name) || (homebrew.feats || []).find((h) => featKey(h.name) === featKey(f.name));
@@ -696,6 +725,7 @@ function AbilitiesListSection({ def, up, c, homebrew, db }) {
             <input type="text" class="w-note" placeholder="nota / escolhas" value=${f.note} onInput=${(e) => setFeature(f.key, { note: e.target.value })} />
             <${Check} label="descrição" checked=${f.showText} onChange=${(v) => setFeature(f.key, { showText: v })} />
           </div>
+          ${f.auto ? html`<div class="small auto-note">⚙ ${f.auto}</div>` : null}
           <details class="cf-text"><summary>texto</summary><p>${f.text}</p></details>
         </div>`)}
       </details>`)}` : null}

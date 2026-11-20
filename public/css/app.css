@@ -471,3 +471,9 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
   body { background: #fff !important; zoom: 1; }
   body::before { display: none !important; }
 }
+
+/* combat states (rage, stances, Power Attack…) */
+.combat-states .row { gap: 6px; }
+.state-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; font-size: 13px; background: var(--bg2); transition: border-color .12s, background .12s; }
+.state-chip input { margin: 0; }
+.state-chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg2)); color: var(--accent2); }

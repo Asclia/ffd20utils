@@ -184,7 +184,8 @@ export function buildFeats(def, c, role, ctx = {}) {
       }
     }
   };
-  const bonusCount = classBonusFeats(c);
+  const bonusCount = c.bonusFeatBudget ?? classBonusFeats(c);
+  for (const f of c.autoFeats || []) taken.add(featKey(f.name));
   pick(bonusCount, true, (n) => COMBAT_FEATS.has(n));
   pick(Math.max(0, c.featBudget - keep.filter((f) => !f.bonus).length), false);
   const toggles = { ...(def.toggles || {}) };

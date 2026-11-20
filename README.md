@@ -46,6 +46,15 @@ padrão para novas fica em *Biblioteca → Configurações*). No Pathfinder entr
 magias do PF1e (d20pfsrd), energias no lugar dos elementos do FF, magias por dia no lugar de MP e sem
 regras de chefe/Limit Break.
 
+## Cálculos automáticos
+
+- **Feats bônus de classe** (Fighter, Monk, Ranger, Gunslinger…) aumentam o limite de feats: feats além do limite normal ocupam as vagas bônus sozinhos. Feats que a classe concede (Improved Unarmed Strike do Monk, Endurance, Scribe Scroll…) entram sozinhos no statblock.
+- **Características de classe** com efeito numérico: Armor Training (Des máx. e penalidade), Bravery, Trap/Danger Sense, Weapon Training, Chosen Weapon, Expert Archer, Polearm Training, One with the Sword, bônus de CA do Monk/Ninja/Dancer/Brawler (some com armadura), Nimble, Elaborate Parry, Divine/Holy Grace, Fast Movement (respeitando a armadura), dano desarmado por nível, Bardic Knowledge, Trapfinding, Nature Sense, Hawkeye, Bodybuilding, redução de dano, imunidades (Aura of Courage, Divine Health, Purity of Body…) e outras.
+- **Estados de combate** ligáveis no painel ao lado do statblock: Rage/Bloodrage, Defensive Stance, Darkside, Grit Stance, Sword/Shield Oath, Smite Evil, Inspire Courage, Studied Target, Mutagen, Flurry of Blows, além de Power Attack, Deadly Aim etc.
+- **Traços raciais** lidos da página da raça: bônus de perícia, saves, CA/DMC, imunidades e o feat/graduação extra do Humano.
+- **Arquétipos** trocam as características substituídas e as perícias de classe que adicionam ou removem.
+- Pré-requisitos de feat checam também nível de classe ("fighter level 4th") e feats concedidos pela classe.
+
 ## Montagem automática de NPC
 
 Na seção **⚡ Montagem automática** do editor de NPC, escolha o papel (detectado pela classe: combatente,
@@ -137,7 +146,7 @@ feats em `public/js/rules/featEffects.js`.
 
 ### Limitações conhecidas
 
-- Características de classe aparecem no statblock com o valor da tabela, mas os **efeitos numéricos** delas (ex.: o bônus de CA de *Defensive Stance*) não são aplicados automaticamente: use *Modificadores personalizados*.
+- Os efeitos numéricos das características de classe mais comuns são aplicados (lista abaixo); características com escolhas abertas (favored enemy, domínios, talentos) continuam como texto: use *Modificadores personalizados* se precisar.
 - Classes ocultistas do Pathfinder (Kineticist, Medium…) não têm tabela de classe no d20pfsrd, então não aparecem como classe (as listas de magia delas existem).
 - Feats sem ⚙ são listados no statblock, mas os efeitos deles não são calculados.
 - O texto dos statblocks é em inglês (padrão dos statblocks de PF1e e dos termos do FFd20); a interface é em português.
