@@ -136,4 +136,13 @@ t('"ocultar descrição": Pounce stays in Special Attacks, no paragraph in Speci
   assert.doesNotMatch(out, /\*\*Pounce \(Ex\)\*\*/);
 });
 
+t('Improved Natural Attack follows the d8 chain (2d8 → 3d8, 1d10 → 2d8, 1d8 → 2d6)', () => {
+  for (const [dice, want] of [['2d8', '3d8'], ['1d10', '2d8'], ['1d8', '2d6'], ['2d6', '3d6']]) {
+    const d = newCreature('monster');
+    d.attacks = [{ ...newAttack('melee', true), name: 'bite', count: 1, dice }];
+    d.feats = [{ id: 'ina', name: 'Improved Natural Attack', param: 'bite', bonus: false }];
+    assert.match(compute(d, db).attacks.melee[0], new RegExp(`\\(${want}[+)]`), `${dice} → ${want}`);
+  }
+});
+
 console.log(`${passed} class-effect tests passed`);

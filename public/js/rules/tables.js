@@ -125,17 +125,39 @@ export const SIZE_DATA = {
 };
 
 // Damage dice progression (PF1e "Tiny and Large weapon damage" / natural attack step table)
-export const DICE_STEPS = ['1', '1d2', '1d3', '1d4', '1d6', '1d8', '1d10', '2d6', '2d8', '3d6', '3d8', '4d6', '4d8', '6d6', '6d8', '8d6', '8d8', '12d6', '12d8', '16d6'];
+// PF1e damage dice progression (Improved Natural Attack / size changes) — two separate chains:
+//   d6 chain: 1d2, 1d3, 1d4, 1d6, 1d8, 2d6, 3d6, 4d6, 6d6, 8d6, 12d6
+//   d8 chain: 1d10, 2d8, 3d8, 4d8, 6d8, 8d8, 12d8
+// 2d4 counts as 1d8; 1d12 goes up to 3d6 (and down to 1d10).
+const D6_CHAIN = ['1', '1d2', '1d3', '1d4', '1d6', '1d8', '2d6', '3d6', '4d6', '6d6', '8d6', '12d6', '16d6', '24d6'];
+const D8_CHAIN = ['1d10', '2d8', '3d8', '4d8', '6d8', '8d8', '12d8', '16d8', '24d8'];
+export const DICE_STEPS = D6_CHAIN; // kept for compatibility
+const avgOf = (d) => { const m = /^(\d+)d(\d+)$/.exec(d); return m ? Number(m[1]) * (Number(m[2]) + 1) / 2 : Number(d) || 0; };
+function stepOnce(d, dir) {
+  if (d === '2d4') d = '1d8';
+  if (d === '1d12') return dir > 0 ? '3d6' : '1d10';
+  let i = D6_CHAIN.indexOf(d);
+  if (i >= 0) {
+    if (dir < 0 && i === 0) return d;
+    return D6_CHAIN[Math.min(D6_CHAIN.length - 1, i + dir)];
+  }
+  i = D8_CHAIN.indexOf(d);
+  if (i >= 0) {
+    if (dir < 0 && i === 0) return '1d8'; // 1d10 down → 1d8
+    return D8_CHAIN[Math.min(D8_CHAIN.length - 1, i + dir)];
+  }
+  // dice outside both chains (2d10, 3d4, 1d12+…): continue from the chain step with the closest average
+  const all = [...D6_CHAIN.slice(1), ...D8_CHAIN];
+  const near = all.reduce((best, x) => (Math.abs(avgOf(x) - avgOf(d)) < Math.abs(avgOf(best) - avgOf(d)) ? x : best), all[0]);
+  return near === d ? d : stepOnce(near, dir);
+}
 export function stepDice(dice, steps) {
   if (!steps) return dice;
   let d = String(dice).replace(/\s/g, '');
-  if (d === '2d4') d = '1d8';
-  if (d === '1d12') d = '2d6';
-  let i = DICE_STEPS.indexOf(d);
-  if (i < 0) return dice;
-  // PF rule: below 1d6 steps are single; above, increasing by one step
-  i = Math.max(0, Math.min(DICE_STEPS.length - 1, i + steps));
-  return DICE_STEPS[i];
+  if (!/^\d+(d\d+)?$/.test(d)) return dice;
+  const dir = steps > 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(steps); k++) d = stepOnce(d, dir);
+  return d;
 }
 export function sizeStepsFromMedium(size) {
   return SIZES.indexOf(size) - SIZES.indexOf('Medium');
