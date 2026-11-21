@@ -502,3 +502,6 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 .bc-body .statblock { font-size: 13.5px; }
 .battle-card button.icon:disabled { opacity: .3; cursor: default; }
 @media print { .battle-bar, .battle-info, .bc-note, .battle-card > header button { display: none !important; } .bc-body { max-height: none; overflow: visible; } }
+.house-rules { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.house-rule { align-items: flex-start; }
+.house-rule input { margin-top: 3px; }

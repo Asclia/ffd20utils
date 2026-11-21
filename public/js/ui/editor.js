@@ -14,6 +14,7 @@ import { exportMarkdown } from '../export.js';
 import { EquipmentSection } from './equipment.js';
 import { TalentsSection } from './talents.js';
 import { useAppearance } from './appearance.js';
+import { goneFeat, HOUSE_FEATS } from '../rules/houseRules.js';
 import { autoBuild, detectRole, ROLES, PARTS, mainClass } from '../rules/autobuild.js';
 
 const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
@@ -296,7 +297,7 @@ function LegendarySection({ def, up, c }) {
 // ------------------------------------------------------------------ combat states (rage, stances, Power Attack…)
 function CombatStates({ def, c, up }) {
   const featToggles = (def.feats || []).map((f) => ({ f, eff: featEffect(f.name) })).filter((x) => x.eff?.toggle).map(({ f, eff }) => ({ key: f.id, label: eff.toggle.replace(/^Aplicar /, '') }));
-  const all = [...(c.combatToggles || []), ...featToggles];
+  const all = [...(c.combatToggles || []), ...(c.houseToggles || []), ...featToggles];
   if (!all.length) return null;
   const set = (key, v) => {
     const t = { ...(def.toggles || {}), [key]: v };
@@ -306,8 +307,8 @@ function CombatStates({ def, c, up }) {
   };
   return html`<div class="panel combat-states">
     <h4>Estados de combate</h4>
-    <div class="row wrap">${all.map((x) => html`<label class="state-chip ${def.toggles?.[x.key] ? 'on' : ''}" title=${x.className ? `${x.className}: ${x.feature}` : ''}>
-      <input type="checkbox" checked=${!!def.toggles?.[x.key]} onChange=${(e) => set(x.key, e.currentTarget.checked)} /> ${x.label}</label>`)}</div>
+    <div class="row wrap">${all.map((x) => { const on = x.on ?? !!def.toggles?.[x.key]; return html`<label class="state-chip ${on ? 'on' : ''}" title=${x.className ? `${x.className}: ${x.feature}` : ''}>
+      <input type="checkbox" checked=${on} onChange=${(e) => set(x.key, e.currentTarget.checked)} /> ${x.label}</label>`; })}</div>
     <div class="muted small">O statblock mostra os valores com os estados marcados (no PF1e, normalmente fora de fúria/postura).</div>
   </div>`;
 }
@@ -532,7 +533,9 @@ function OffenseSection({ def, up, upIn, c }) {
 
 // ------------------------------------------------------------------ feats
 function FeatsSection({ def, up, c, db, homebrew }) {
-  const all = useMemo(() => [...(homebrew.feats || []).map((f) => ({ ...f, source: 'Homebrew' })), ...db.feats], [db.feats, homebrew.feats]);
+  const house = c.houseRules;
+  const all = useMemo(() => [...(homebrew.feats || []).map((f) => ({ ...f, source: 'Homebrew' })),
+    ...(house ? HOUSE_FEATS.filter((f) => house[f.rule]) : []), ...db.feats], [db.feats, homebrew.feats, house]);
   const [srcFilter, setSrcFilter] = useState('');
   const add = (f, q) => {
     const id = uid();
@@ -561,6 +564,11 @@ function FeatsSection({ def, up, c, db, homebrew }) {
     if (bab && c.bab < Number(bab[1])) issues.push(`BAB +${bab[1]}`);
     const names = new Set([...def.feats, ...(c.autoFeats || [])].map((x) => featKey(x.name)));
     if (c.featFlags?.finesse) names.add('weapon finesse');
+    // Moogle in the Room: feats that are gone count as met (combat options, finesse…) or are met by their replacement
+    if (house) {
+      for (const x of all) { const g = goneFeat(house, x.name); if (g && (!/^[A-Z]/.test(g.by) || names.has(featKey(g.by)) || (house.pointBlank && /point.blank/i.test(x.name)))) names.add(featKey(x.name)); }
+      if (house.pointBlank && /point[- ]blank shot/i.test(p) && featKey(f.name) !== 'precise shot' && !names.has('precise shot')) issues.push('Precise Shot');
+    }
     for (const m of p.matchAll(/(\w[\w -]*?) level (\d+)(?:st|nd|rd|th)?/gi)) { // "fighter level 4th", "caster level 5th"
       const who = m[1].trim().toLowerCase().split(' ').pop();
       const need = Number(m[2]);
@@ -600,7 +608,7 @@ function FeatsSection({ def, up, c, db, homebrew }) {
       <button class="btn small ghost" onClick=${addCustom}>+ feat personalizado</button>
     </div>
     <${SearchPicker} items=${all} getText=${(f) => f.name} onPick=${add} placeholder="Buscar feat (FFd20, Pathfinder, homebrew)…"
-      filter=${srcFilter ? (f) => f.source === srcFilter : null}
+      filter=${(f) => (!srcFilter || f.source === srcFilter) && !goneFeat(house, f.name)}
       renderItem=${(f) => html`<span><b>${featEffect(f.name) ? '⚙ ' : ''}${f.name}</b> <span class="src-badge">${f.source}${f.category ? ` · ${f.category}` : ''}</span><br /><span class="small muted">${f.benefit?.slice(0, 160)}</span></span>`} />
   </${Section}>`;
 }

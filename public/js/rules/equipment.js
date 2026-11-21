@@ -117,14 +117,43 @@ export function specialGil(cost) {
   return v >= 100 ? v : 0;
 }
 
+// ------------------------------------------------------------------ special materials (PF1e core + FFd20)
+// weapon: cost(a) extra price, mw = counts as masterwork, dmg = damage modifier, rider(a) = extra damage text
+// armor:  cost(type) extra price, maxDex/acp changes, lighter = counts as one category lighter, dr = DR n/— by type
+export const WEAPON_MATERIALS = {
+  '': { name: 'normal' },
+  adamantine: { name: 'adamantine', cost: () => 3000, mw: true, note: 'Ignora dureza menor que 20; vence RD/adamantine.' },
+  'cold iron': { name: 'cold iron', cost: (a) => Number(a.basePrice) || 0, note: 'Custo base dobrado; vence RD/cold iron (fadas, demônios).' },
+  silver: { name: 'alchemical silver', label: 'silver', cost: (a) => (a.light ? 20 : a.hands === 'two' ? 180 : 90), dmg: -1, note: '−1 no dano; vence RD/silver.' },
+  mithral: { name: 'mithral', cost: (a) => (a.light ? 1000 : a.hands === 'two' ? 4000 : 2000), mw: true, note: 'Metade do peso; conta como prata (sem o −1 no dano).' },
+  darkwood: { name: 'darkwood', cost: (a) => (a.hands === 'two' ? 40 : 20), mw: true, note: 'Só armas de madeira; metade do peso.' },
+  'living crystal': { name: 'living crystal', ff: true, cost: () => 1600, mw: true, rider: (a) => `${1 + (Number(a.enhancement) || 0)} bleed`, note: 'Sangramento 1 (+1 por bônus de melhoria); vence RD/crystal.' },
+  'elemental crystal': { name: 'elemental crystal', ff: true, cost: () => 8300, mw: true, element: true, rider: (a) => `1d6${Number(a.enhancement) ? `+${Number(a.enhancement)}` : ''} ${a.materialElement || 'fire'}`, note: '+1d6 do elemento (+1 por bônus de melhoria); vence RD/crystal.' },
+};
+export const ARMOR_MATERIALS = {
+  '': { name: 'normal' },
+  adamantine: { name: 'adamantine', cost: (t) => ({ light: 5000, medium: 10000, heavy: 15000, shield: 2000 }[t] || 5000), mw: true, dr: (t) => ({ light: 1, medium: 2, heavy: 3 }[t] || 0), note: 'RD 1/— (leve), 2/— (média), 3/— (pesada).' },
+  mithral: { name: 'mithral', cost: (t) => ({ light: 1000, medium: 4000, heavy: 9000, shield: 1000 }[t] || 1000), mw: true, maxDex: 2, acp: 3, lighter: true, note: 'Des máx. +2, penalidade −3, conta como uma categoria mais leve.' },
+  dragonhide: { name: 'dragonhide', cost: (t, it) => Number(it.price) || 0, mw: true, note: 'Custo base dobrado; obra-prima.' },
+  darkwood: { name: 'darkwood', cost: () => 50, mw: true, acp: 2, shieldOnly: true, note: 'Escudos de madeira: penalidade −2.' },
+  'living crystal': { name: 'living crystal', ff: true, cost: () => 1300, mw: true, note: 'Obra-prima; dureza ×1,5.' },
+  'elemental crystal': { name: 'elemental crystal', ff: true, cost: (t) => ({ light: 24150, medium: 26150, heavy: 30150, shield: 24150 }[t] || 24150), mw: true, element: true, resist: (it) => 5 + 5 * (Number(it.enh) || 0), note: 'Resistência 5 (+5 por bônus de melhoria) ao elemento.' },
+};
+export const armorKind = (it) => {
+  const a = ARMORS.find((x) => x.name === String(it?.name || '').toLowerCase());
+  return a ? a.type : Number(it?.bonus) >= 7 ? 'heavy' : Number(it?.bonus) >= 4 ? 'medium' : 'light';
+};
+
 // Prices (gil). PF1e: weapons 2000 × b², armor 1000 × b² (b = enhancement + special ability bonus), +masterwork.
 export function weaponPrice(a, specialsDB = []) {
   const specials = (a.specials || []).map((n) => specialsDB.find((s) => s.name === n)).filter(Boolean);
   const b = (Number(a.enhancement) || 0) + specials.reduce((s, x) => s + specialBonus(x.cost), 0);
   const flat = specials.reduce((s, x) => s + specialGil(x.cost), 0);
   const base = Number(a.basePrice) || 0;
-  if (!b && !a.masterwork) return base + flat;
-  return base + 300 + 2000 * b * b + flat;
+  const mat = WEAPON_MATERIALS[a.material || ''] || {};
+  const matCost = mat.cost ? mat.cost(a) : 0;
+  if (!b && !a.masterwork && !mat.mw) return base + flat + matCost;
+  return base + (mat.mw ? 0 : 300) + 2000 * b * b + flat + matCost;
 }
 export function armorPrice(it, specialsDB = []) {
   if (!it) return 0;
@@ -132,8 +161,10 @@ export function armorPrice(it, specialsDB = []) {
   const b = (Number(it.enh) || 0) + specials.reduce((s, x) => s + specialBonus(x.cost), 0);
   const flat = specials.reduce((s, x) => s + specialGil(x.cost), 0);
   const base = Number(it.price) || 0;
-  if (!b && !it.masterwork) return base + flat;
-  return base + 150 + 1000 * b * b + flat;
+  const mat = ARMOR_MATERIALS[it.material || ''] || {};
+  const matCost = mat.cost ? mat.cost(it.maxDex === null || it.maxDex === undefined || it.isShield ? 'shield' : armorKind(it), it) : 0;
+  if (!b && !it.masterwork && !mat.mw) return base + flat + matCost;
+  return base + (mat.mw ? 0 : 150) + 1000 * b * b + flat + matCost;
 }
 
 export const itemLabel = (prefix, name, specials) => `${prefix ? `+${prefix} ` : ''}${(specials || []).map((s) => s.toLowerCase()).join(' ')}${specials?.length ? ' ' : ''}${name}`;
@@ -150,15 +181,17 @@ export function gearSummary(d, db) {
   let total = 0;
   for (const a of d.attacks || []) {
     if (a.natural || a.notGear) continue;
-    const label = itemLabel(Number(a.enhancement) || 0, `${a.masterwork && !Number(a.enhancement) ? 'masterwork ' : ''}${a.name}`, a.specials);
+    const matW = a.material ? `${(WEAPON_MATERIALS[a.material]?.label || WEAPON_MATERIALS[a.material]?.name || a.material)} ` : '';
+    const label = itemLabel(Number(a.enhancement) || 0, `${a.masterwork && !Number(a.enhancement) && !WEAPON_MATERIALS[a.material || '']?.mw ? 'masterwork ' : ''}${matW}${a.name}`, a.specials);
     other.push(label);
     total += weaponPrice(a, items.weaponSpecials);
   }
   for (const k of ['armor', 'shield']) {
     const it = eq[k];
     if (!it || !it.name) continue;
-    other.push(itemLabel(Number(it.enh) || 0, `${it.masterwork && !Number(it.enh) ? 'masterwork ' : ''}${it.name}`, it.specials));
-    total += armorPrice(it, items.armorSpecials);
+    const matA = it.material ? `${ARMOR_MATERIALS[it.material]?.name || it.material} ` : '';
+    other.push(itemLabel(Number(it.enh) || 0, `${it.masterwork && !Number(it.enh) && !ARMOR_MATERIALS[it.material || '']?.mw ? 'masterwork ' : ''}${matA}${it.name}`, it.specials));
+    total += armorPrice({ ...it, isShield: k === 'shield' }, items.armorSpecials);
   }
   for (const [slot] of SLOTS) {
     const it = eq.slots?.[slot];

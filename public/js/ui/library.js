@@ -5,6 +5,7 @@ import { crLabel } from '../rules/tables.js';
 import { folderPath } from './editor.js';
 import { useComputed, Viewer } from './bestiary.js';
 import { exportManyZip, exportToVault, exportJSON } from '../export.js';
+import { HOUSE_RULES, defaultHouseRules } from '../rules/houseRules.js';
 
 export function Library({ app, onOpen }) {
   const [sel, setSel] = useState('__all');
@@ -151,6 +152,7 @@ export function Library({ app, onOpen }) {
         </div>
         ${app.store.kind === 'server' ? html`<${LibraryFolder} app=${app} />` : null}
         <${Settings} app=${app} />
+        <${HouseRules} app=${app} />
       </div>
     </div>
     ${view ? html`<${Viewer} app=${app} entry=${view} onClose=${() => setView(null)} onOpen=${onOpen} />` : null}
@@ -180,6 +182,19 @@ function Settings({ app }) {
 }
 
 // ------------------------------------------------------------------ library folder (Koofr, Dropbox, MEGA…)
+// Moogle in the Room / Elephant in the Room: each rule on or off (stored with the homebrew, synced)
+function HouseRules({ app }) {
+  const r = { ...defaultHouseRules(), ...(app.homebrew.houseRules || {}) };
+  const set = async (patch) => { await app.setHomebrew({ ...app.homebrew, houseRules: { ...r, ...patch } }); };
+  return html`<div class="panel">
+    <h4>Regras da casa</h4>
+    <${Check} label="Usar Moogle in the Room / Elephant in the Room (fim dos feat taxes)" checked=${r.enabled} onChange=${(v) => set({ enabled: v })} />
+    <div class="muted small">Vale para todas as criaturas (FFd20 e Pathfinder). <a href="https://finalfantasyd20.com/system-rules/optional-systems/moogle-in-the-room/" target="_blank" rel="noopener">Regras ↗</a></div>
+    ${r.enabled ? html`<div class="house-rules">${HOUSE_RULES.map(([k, title, desc]) => html`<label class="check house-rule"><input type="checkbox" checked=${r[k]} onChange=${(e) => set({ [k]: e.currentTarget.checked })} />
+      <span><b>${title}</b><br /><small class="muted">${desc}</small></span></label>`)}</div>` : null}
+  </div>`;
+}
+
 function LibraryFolder({ app }) {
   const [info, setInfo] = useState(null);
   const [dir, setDir] = useState('');

@@ -161,4 +161,58 @@ t('Legendary and Lair Actions sections', () => {
   assert.doesNotMatch(md(d, compute(d, db)), /LEGENDARY|LAIR/);
 });
 
+t('Manyshot and FFd20 archer Quick Shot', () => {
+  const d = npc('pf1e', 'pf-fighter', 6);
+  d.abilities.dex = 18;
+  d.attacks = [{ ...newAttack('ranged', false), name: 'longbow', dice: '1d8', critRange: 20, critMult: 3, range: '100 ft.' }];
+  d.feats = [{ id: 'ms', name: 'Manyshot', param: '', bonus: false }];
+  d.toggles = { ms: true };
+  assert.match(compute(d, db).attacks.ranged[0], /Manyshot: first attack fires two arrows/);
+  const a = npc('ffd20', 'archer', 7);
+  a.attacks = [{ ...newAttack('ranged', false), name: 'longbow', dice: '1d8', critRange: 20, critMult: 3 }];
+  const c = compute(a, db);
+  assert.match(c.attacks.ranged[0], /longbow ([+-]\d+)\/\1 /); // BAB +5: one attack + the Quick Shot extra at the same bonus
+  const key = c.combatToggles.find((x) => /Quick Shot/.test(x.label)).key;
+  assert.doesNotMatch(compute({ ...a, toggles: { [key]: false } }, db).attacks.ranged[0], /longbow ([+-]\d+)\/\1\//);
+});
+
+t('special materials: mithral armor, adamantine armor DR, silver and crystal weapons', () => {
+  const d = npc('ffd20', 'fighter' in db.classesById ? 'fighter' : 'warrior', 4);
+  d.abilities.dex = 18;
+  d.equipment.armor = { name: 'breastplate', bonus: 6, maxDex: 3, acp: 4, enh: 0, specials: [], price: 200, material: 'mithral' };
+  let c = compute(d, db);
+  assert.ok(c.ac.parts.some(([v, n]) => v === 4 && n === 'Dex')); // max Dex 3 + 2 (+ armor training if any) ≥ 4
+  assert.equal(c.armorType, 'light');                              // mithral medium armor counts as light
+  d.equipment.armor.material = 'adamantine';
+  c = compute(d, db);
+  assert.match(c.dr, /2\/—/);
+  d.attacks = [{ ...newAttack('melee', false), name: 'longsword', dice: '1d8', material: 'silver' }, { ...newAttack('melee', false), name: 'dagger', dice: '1d4', material: 'elemental crystal', materialElement: 'ice', enhancement: 1 }];
+  c = compute(d, db);
+  assert.match(c.attacks.melee[0], /silver longsword/);
+  assert.match(c.attacks.melee[0], /plus 1d6\+1 ice/);
+  const out = md(d, c);
+  assert.match(out, /adamantine breastplate/);
+});
+
+t('Moogle in the Room house rules', () => {
+  const hdb = { ...db, homebrew: { houseRules: { enabled: true, weaponGroups: true, finesse: true, agileManeuvers: true, combatOptions: true, unarmed: true, maneuvers: true, pointBlank: true, dodge: true, twf: true } } };
+  const d = npc('pf1e', 'pf-fighter', 5);
+  d.abilities.dex = 16; d.abilities.str = 10;
+  d.attacks = [{ ...newAttack('melee', false), name: 'rapier', dice: '1d6', finesse: true }, { ...newAttack('melee', false), name: 'scimitar', dice: '1d6' }, { ...newAttack('melee', false), name: 'dagger', dice: '1d4', light: true }];
+  d.feats = [{ id: 'wf', name: 'Weapon Focus', param: 'rapier', bonus: false }];
+  const off = compute(d, db);
+  const on = compute(d, hdb);
+  assert.ok(on.attackDetails[0].att > off.attackDetails[0].att);  // Dex to hit without Weapon Finesse
+  assert.equal(on.attackDetails[1].att, off.attackDetails[1].att);      // scimitar: heavy blade, not finesse → unchanged
+  assert.equal(on.attackDetails[2].att - off.attackDetails[2].att, 1 + 3 - 1); // dagger: light blade → Weapon Focus (group) +1, Dex +3 instead of Str +1 (human +2 Str)
+  assert.ok(on.cmb > off.cmb);                                     // Agile Maneuvers with a finesse weapon
+  assert.ok(on.houseToggles.some((x) => /Power Attack/.test(x.label))); // Power Attack as a combat option
+  const pa = compute({ ...d, toggles: { 'hr:power attack': true } }, hdb);
+  assert.ok(pa.attackDetails[0].att < on.attackDetails[0].att);
+  d.feats.push({ id: 'pa', name: 'Power Attack', param: '', bonus: false });
+  assert.ok(compute(d, hdb).warnings.some((w) => /Power Attack não existe/.test(w)));
+  const monk = compute(npc('pf1e', 'pf-monk', 1), hdb);
+  assert.ok(monk.feats.some((f) => f.name === 'Unarmed Combatant') && !monk.feats.some((f) => f.name === 'Improved Unarmed Strike'));
+});
+
 console.log(`${passed} class-effect tests passed`);

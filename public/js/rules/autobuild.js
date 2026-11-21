@@ -6,6 +6,7 @@ import { NPC_ARRAYS, npcGear, PC_WEALTH, mod, scaleDiceForSize } from './tables.
 import { WEAPONS } from './presets.js';
 import { ARMORS, SHIELDS, classicItems, makeItem } from './equipment.js';
 import { featKey } from './featEffects.js';
+import { goneFeat } from './houseRules.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
@@ -119,7 +120,7 @@ const FEAT_RULES = {
   'Extra MP': { caster: 1, ff: true }, 'Elemental Focus': { caster: 1, ff: true, param: 'element' }, 'Greater Elemental Focus': { caster: 1, ff: true, cl: 8, feats: ['Elemental Focus'], param: 'element' },
   'Elemental Penetration': { caster: 1, ff: true, param: 'element' },
   'Improved Unarmed Strike': {}, 'Stunning Fist': { dex: 13, wis: 13, bab: 8, feats: ['Improved Unarmed Strike'] }, 'Weapon Focus (unarmed)': {},
-  'Two-Weapon Fighting': { dex: 15 },
+  'Two-Weapon Fighting': { dex: 15 }, 'Unarmed Combatant': { dex: 13 },
 };
 const FEAT_PRIORITY = {
   melee: ['Power Attack', 'Weapon Focus', 'Improved Initiative', 'Furious Focus', 'Cleave', 'Toughness', 'Weapon Specialization', 'Iron Will', 'Vital Strike', 'Great Cleave', 'Improved Critical', 'Lunge', 'Greater Weapon Focus', 'Combat Reflexes', 'Great Fortitude', 'Lightning Reflexes', 'Improved Vital Strike'],
@@ -131,7 +132,7 @@ const FEAT_PRIORITY = {
   caster: ['Improved Initiative', 'Spell Focus', 'Combat Casting', 'Toughness', 'Spell Penetration', 'Greater Spell Focus', 'Iron Will', 'Greater Spell Penetration', 'Lightning Reflexes', 'Great Fortitude', 'Alertness'],
   ffcaster: ['Improved Initiative', 'Extra MP', 'Elemental Focus', 'Combat Casting', 'Toughness', 'Elemental Penetration', 'Greater Elemental Focus', 'Iron Will', 'Spell Focus', 'Lightning Reflexes', 'Great Fortitude', 'Alertness'],
 };
-const COMBAT_FEATS = new Set(['Power Attack', 'Furious Focus', 'Cleave', 'Great Cleave', 'Weapon Focus', 'Weapon Specialization', 'Greater Weapon Focus', 'Improved Critical', 'Vital Strike', 'Improved Vital Strike', 'Lunge', 'Combat Reflexes', 'Improved Initiative', 'Shield Focus', 'Point-Blank Shot', 'Precise Shot', 'Rapid Shot', 'Deadly Aim', 'Manyshot', 'Clustered Shots', 'Improved Precise Shot', 'Weapon Finesse', 'Dodge', 'Mobility', 'Spring Attack', 'Combat Expertise', 'Improved Unarmed Strike', 'Stunning Fist', 'Two-Weapon Fighting']);
+const COMBAT_FEATS = new Set(['Power Attack', 'Furious Focus', 'Cleave', 'Great Cleave', 'Weapon Focus', 'Weapon Specialization', 'Greater Weapon Focus', 'Improved Critical', 'Vital Strike', 'Improved Vital Strike', 'Lunge', 'Combat Reflexes', 'Improved Initiative', 'Shield Focus', 'Point-Blank Shot', 'Precise Shot', 'Rapid Shot', 'Deadly Aim', 'Manyshot', 'Clustered Shots', 'Improved Precise Shot', 'Weapon Finesse', 'Dodge', 'Mobility', 'Spring Attack', 'Combat Expertise', 'Improved Unarmed Strike', 'Stunning Fist', 'Two-Weapon Fighting', 'Unarmed Combatant']);
 
 // bonus feats granted by the class tables ("Bonus feat", "Combat feat"...)
 function classBonusFeats(c) {
@@ -150,16 +151,23 @@ export function buildFeats(def, c, role, ctx = {}) {
   const keep = (def.feats || []).filter((f) => f.source === 'custom' || f.source === 'Homebrew');
   const taken = new Set(keep.map((f) => featKey(f.name)));
   const out = [...keep];
+  // Moogle in the Room: feats that are gone are never picked; the ones that became options count as known
+  const house = c.houseRules;
+  const swap = { 'improved unarmed strike': 'Unarmed Combatant' };
+  const satisfied = (f) => taken.has(featKey(f)) || (house && goneFeat(house, f) && (
+    /point[- ]blank/i.test(f) ? taken.has('precise shot') : !/^[A-Z]/.test(goneFeat(house, f).by) || taken.has(featKey(goneFeat(house, f).by))));
   const ok = (name) => {
     const r = FEAT_RULES[name] || {};
     if (taken.has(featKey(name))) return false;
+    if (house && goneFeat(house, name)) return false;
     if (r.ff && !ff) return false;
     for (const a of ABIL) if (r[a] && (c.abilities[a] ?? 0) < r[a]) return false;
     if (r.bab && c.bab < r.bab) return false;
     if (r.fighter && fighterLv < r.fighter) return false;
     if (r.caster && !cl) return false;
     if (r.cl && cl < r.cl) return false;
-    if ((r.feats || []).some((f) => !taken.has(featKey(f)))) return false;
+    // Moogle in the Room: Precise Shot replaces Point-Blank Shot, so it needs nothing itself
+    if (!(house?.pointBlank && name === 'Precise Shot') && (r.feats || []).some((f) => !satisfied(f))) return false;
     if (name === 'Shield Focus' && !ctx.shield && !def.equipment?.shield) return false;
     return true;
   };
@@ -171,10 +179,11 @@ export function buildFeats(def, c, role, ctx = {}) {
     if (p === 'element') return ctx.element || (ff ? 'fire' : 'fire');
     return '';
   };
+  const names = house ? list.map((n) => (house.unarmed && swap[n.toLowerCase()]) || n) : list;
   const pick = (count, bonus, filter) => {
     let added = 0;
     for (let guard = 0; added < count && guard < 4; guard++) { // repeat passes so chains (Dodge → Mobility) unlock
-      for (const name of list) {
+      for (const name of names) {
         if (added >= count) break;
         if (filter && !filter(name)) continue;
         if (!ok(name)) continue;
@@ -189,7 +198,9 @@ export function buildFeats(def, c, role, ctx = {}) {
   pick(bonusCount, true, (n) => COMBAT_FEATS.has(n));
   pick(Math.max(0, c.featBudget - keep.filter((f) => !f.bonus).length), false);
   const toggles = { ...(def.toggles || {}) };
-  for (const f of out) if (/Power Attack|Deadly Aim|Rapid Shot|Furious Focus/i.test(f.name)) toggles[f.id] = true;
+  for (const f of out) if (/Power Attack|Deadly Aim|Rapid Shot|Furious Focus|Manyshot/i.test(f.name)) toggles[f.id] = true;
+  // Moogle in the Room: Power Attack / Deadly Aim are free combat options — turn the right one on
+  if (house?.combatOptions && c.bab >= 1) toggles[`hr:${['ranged'].includes(role) ? 'deadly aim' : 'power attack'}`] = !caster;
   return { feats: out, toggles };
 }
 

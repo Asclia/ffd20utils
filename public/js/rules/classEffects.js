@@ -142,6 +142,10 @@ export const CLASS_EFFECTS = {
   'agile archer': { fn: () => ({ hooks: [(a, all, x) => (a.kind === 'ranged' && /bow|crossbow/i.test(a.name) ? { dmg: Math.max(0, x.m.dex) } : null)], note: 'Soma Des ao dano com arcos e bestas.' }) },
   'unarmed strike': { fn: (x) => (/^(pf-)?(monk|brawler|monk-unchained)$/.test(x.cls.id) ? { hooks: [unarmedHook(PF_MONK_DICE(x.L))], note: `Dano desarmado ${PF_MONK_DICE(x.L)}.` } : {}) },
   'martial arts': { fn: (x) => { const m = /(\d+d\d+)\s*\/\s*(\d+d\d+)/.exec(x.value || ''); const dice = m ? m[2] : '1d6'; return { hooks: [unarmedHook(dice)], note: `Dano desarmado ${dice} (Médio).` }; } },
+  'quick shot': {
+    toggles: [{ id: 'quick', label: 'Quick Shot (ataque total)', defaultOn: true }],
+    fn: (x) => (x.on('quick') ? { hooks: [(a) => (a.kind === 'ranged' && /bow|crossbow/i.test(a.name) ? { att: -2, extraAttacks: 1 } : null)], note: 'Ataque extra com arco/besta no ataque total; −2 em todos.' } : { note: 'Desligado em Estados de combate.' }),
+  },
   'flurry of blows': {
     toggles: [{ id: 'flurry', label: 'Flurry of blows' }],
     fn: (x) => {
@@ -283,8 +287,9 @@ export function applyClassEffects({ features, stage, x0, toggles }) {
     if (!eff || !eff.fn) continue;
     if ((eff.stage || 'rest') !== stage) continue;
     const tkey = (id) => `cf:${cls.id}:${key}:${id}`;
-    for (const t of eff.toggles || []) res.toggles.push({ key: tkey(t.id), label: t.label, className: cls.name, feature: f.name });
-    const x = { ...x0, L, cls, value, v: parseFeatureValue(value), gained: f.level, on: (id) => !!toggles[tkey(id)] };
+    const isOn = (id) => { const k = tkey(id); return k in toggles ? !!toggles[k] : !!(eff.toggles || []).find((t) => t.id === id)?.defaultOn; };
+    for (const t of eff.toggles || []) res.toggles.push({ key: tkey(t.id), label: t.label, className: cls.name, feature: f.name, on: isOn(t.id) });
+    const x = { ...x0, L, cls, value, v: parseFeatureValue(value), gained: f.level, on: isOn };
     if (eff.when && !eff.when(x)) { res.notes[`${cls.id}:${f.name}`] = 'Sem efeito no momento (armadura).'; continue; }
     const r = eff.fn(x) || {};
     for (const m of r.mods || []) res.mods.push({ type: 'untyped', ...m, source: f.name });

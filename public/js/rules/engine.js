@@ -7,9 +7,10 @@ import {
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK, PF_ENERGIES, FF_TO_PF, PF_TYPE_OVERRIDES, PF_SUBTYPE_OVERRIDES } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
 import { featEffect, featKey } from './featEffects.js';
-import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS } from './equipment.js';
+import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS, WEAPON_MATERIALS, ARMOR_MATERIALS } from './equipment.js';
 import { raceTraitEffects } from './raceEffects.js';
-import { applyClassEffects, classBonusFeatSlots, grantedFeats, archetypeClassSkills, effectKey } from './classEffects.js';
+import { activeHouseRules, goneFeat, COMBAT_OPTIONS } from './houseRules.js';
+import { applyClassEffects, classBonusFeatSlots, grantedFeats, archetypeClassSkills, effectKey, weaponGroup } from './classEffects.js';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -214,9 +215,12 @@ export function compute(def, db) {
   const armorType = armorDef ? armorDef.type : eq.armor?.name ? (Number(eq.armor.bonus) >= 7 ? 'heavy' : Number(eq.armor.bonus) >= 4 ? 'medium' : 'light')
     : legacyArmor ? (Number(legacyArmor.bonus) >= 7 ? 'heavy' : Number(legacyArmor.bonus) >= 4 ? 'medium' : 'light') : 'none';
   const hasShield = !!eq.shield?.name || (d.armor || []).some((x) => x.kind === 'shield');
-  out.armorType = armorType;
+  const armorMat = ARMOR_MATERIALS[eq.armor?.material || ''] || {};
+  const lighter = { heavy: 'medium', medium: 'light', light: 'light', none: 'none' };
+  const armorTypeEff = armorMat.lighter ? lighter[armorType] : armorType;
+  out.armorType = armorTypeEff;
   const toggles = d.toggles || {};
-  const cfx0 = { m, bab, hd, armor: armorType, shield: hasShield, ff: !pf };
+  const cfx0 = { m, bab, hd, armor: armorTypeEff, shield: hasShield, ff: !pf };
   const cfAbil = applyClassEffects({ features: activeFeatures, stage: 'abilities', x0: cfx0, toggles });
   for (const mm of cfAbil.mods) addMod(mm);
   // feats granted by class features (Improved Unarmed Strike for monks, Endurance, Mobility…)
@@ -228,8 +232,13 @@ export function compute(def, db) {
     if (inv) featNames.add(`${inv[2]} ${inv[1]}`);
   }
   for (const n of ['improved unarmed strike', 'endurance', 'diehard', 'track', 'alertness', 'improved initiative', 'deflect arrows', 'stunning fist', 'mobility', 'combat reflexes', 'run', 'throw anything', 'catch off-guard', 'eschew materials', 'brew potion', 'scribe scroll', 'martial weapon proficiency']) featNames.add(n);
-  const autoFeats = grantedFeats(classes.map((c) => c), activeFeatures, featNames)
-    .filter((f) => !(d.feats || []).some((u) => featKey(u.name) === featKey(f.name)));
+  const house = activeHouseRules(db);
+  out.houseRules = house;
+  let autoFeats = grantedFeats(classes.map((c) => c), activeFeatures, featNames);
+  // Moogle in the Room: class-granted feats that no longer exist become their replacement (or vanish)
+  if (house) autoFeats = autoFeats.map((f) => { const g = goneFeat(house, f.name); return g ? (/^[A-Z]/.test(g.by) ? { ...f, name: g.by, id: `auto:${g.by}` } : null) : f; }).filter(Boolean)
+    .filter((f, i, arr) => arr.findIndex((x) => x.name === f.name) === i);
+  autoFeats = autoFeats.filter((f) => !(d.feats || []).some((u) => featKey(u.name) === featKey(f.name)));
 
   // ---- feats: collect modifiers & attack hooks
   const featFlags = {};
@@ -238,18 +247,23 @@ export function compute(def, db) {
   const seen = {};
   out.feats = [];
   const itemFeats = wornItems.flatMap((it) => (it.feats || []).map((name) => ({ id: `item:${it.id}:${name}`, name, fromItem: it.name })));
-  for (const f of [...(d.feats || []), ...itemFeats, ...autoFeats]) {
+  // Moogle in the Room: Power Attack & co. are combat options for anyone with BAB +1; Dodge includes Mobility
+  const houseFeats = [];
+  if (house?.combatOptions && bab >= 1) for (const name of COMBAT_OPTIONS) if (!(d.feats || []).some((u) => featKey(u.name) === featKey(name))) houseFeats.push({ id: `hr:${featKey(name)}`, name, virtual: true });
+  if (house?.dodge && (d.feats || []).some((u) => featKey(u.name) === 'dodge')) houseFeats.push({ id: 'hr:mobility', name: 'Mobility', virtual: true });
+  out.houseToggles = houseFeats.filter((f) => featEffect(f.name)?.toggle).map((f) => ({ key: f.id, label: `${f.name} (opção)`, on: !!(d.toggles || {})[f.id] }));
+  for (const f of [...(d.feats || []), ...itemFeats, ...autoFeats, ...houseFeats]) {
     const key = featKey(f.name);
     const eff = featEffect(f.name) || (hb.feats || []).find((h) => featKey(h.name) === key);
     const toggleOn = !!(d.toggles || {})[f.id || key];
-    if (!f.fromItem) out.feats.push({ ...f, automated: !!(eff && (eff.mods || eff.attack || eff.flag)) });
+    if (!f.fromItem && !f.virtual) out.feats.push({ ...f, automated: !!(eff && (eff.mods || eff.attack || eff.flag)) });
     if (!eff) continue;
     if (seen[key] && !eff.stack && !eff.param) continue;
     seen[key] = true;
     if (eff.flag) featFlags[eff.flag] = true;
     if (typeof eff.mods === 'function') for (const mm of eff.mods(ctx, f, toggleOn) || []) addMod(mm);
     else if (Array.isArray(eff.mods)) for (const mm of eff.mods) addMod({ ...mm, value: Number(mm.value) || 0, source: f.name });
-    if (eff.attack) featAttackHooks.push({ eff, f, on: toggleOn });
+    if (eff.attack) featAttackHooks.push({ eff, f: house?.weaponGroups && eff.param && f.param ? { ...f, param: weaponGroup(f.param) || f.param } : f, on: toggleOn });
   }
   out.featFlags = featFlags;
 
@@ -262,6 +276,10 @@ export function compute(def, db) {
   for (const mm of cfx.mods) addMod(mm);
   for (const h of cfx.hooks) featAttackHooks.push({ eff: { attack: (c0, ax) => h.fn(ax, d.attacks || [], h.x) }, f: { name: h.source }, on: true });
   Object.assign(featFlags, cfx.flags);
+  if (house?.finesse) featFlags.finesse = true;
+  if (house?.agileManeuvers) { const w = (d.attacks || []).find((a) => !a.natural); if (w && (w.light || w.finesse)) featFlags.agileManeuvers = true; }
+  if (house?.twf && featFlags.gtwf) { featFlags.itwf = true; featFlags.gtwf = bab >= 11; }
+  if (house) for (const f of d.feats || []) { const g = goneFeat(house, f.name); if (g) out.warnings.push(`${f.name} não existe no Moogle in the Room${g.by ? ` (agora: ${g.by})` : ''}.`); }
   out.classEffectNotes = cfx.notes;
   out.combatToggles = [...cfAbil.toggles, ...cfx.toggles];
   out.classImmunities = cfx.immune;
@@ -386,6 +404,7 @@ export function compute(def, db) {
   out.spellDCNotes = mods.filter((x) => x.cond && x.target === 'spellDC').map((x) => `${sign(x.value)} ${x.cond}`);
 
   // ---- AC
+  const materialResist = []; // elemental crystal armor
   if (flags.incorporeal) mods.push({ target: 'ac', value: Math.max(1, m.cha), type: 'deflection', source: 'incorporeal' });
   const acParts = [];
   const acMods = mods.filter((x) => x.target === 'ac' && !x.cond);
@@ -406,8 +425,11 @@ export function compute(def, db) {
     const b = (Number(it.bonus) || 0) + (Number(it.enh) || 0);
     if (k === 'armor') armorBonus = Math.max(armorBonus, b);
     else shieldBonus = Math.max(shieldBonus, b);
-    if (it.maxDex !== '' && it.maxDex !== null && it.maxDex !== undefined) maxDex = Math.min(maxDex, Number(it.maxDex));
-    acp += Math.max(0, (Number(it.acp) || 0) - (it.masterwork || Number(it.enh) ? 1 : 0));
+    const mat = ARMOR_MATERIALS[it.material || ''] || {};
+    if (it.maxDex !== '' && it.maxDex !== null && it.maxDex !== undefined) maxDex = Math.min(maxDex, Number(it.maxDex) + (mat.maxDex || 0));
+    acp += Math.max(0, (Number(it.acp) || 0) - (it.masterwork || Number(it.enh) || mat.mw ? 1 : 0) - (mat.acp || 0));
+    if (mat.dr) { const n = mat.dr(k === 'shield' ? 'shield' : armorType); if (n) addMod({ target: 'dr', value: n, type: 'adamantine', source: `${mat.name} ${it.name}` }); }
+    if (mat.resist) materialResist.push([it.materialElement || EL[0], mat.resist(it)]);
   }
   // armor training and similar: higher max Dex and lower armor check penalty while wearing armor
   if (armorType !== 'none') {
@@ -513,9 +535,10 @@ export function compute(def, db) {
         if (a.dmgMult !== undefined && a.dmgMult !== '' && a.dmgMult !== null && a.dmgAbility === 'custom') dmgMult = Number(a.dmgMult);
         const dmgAbilScore = a.dmgAbility === 'dex' ? m.dex : a.dmgAbility === 'cha' ? m.cha : m.str;
         let dmgAbil = dmgMult === 0 ? 0 : (dmgAbilScore < 0 ? dmgAbilScore : Math.floor(dmgAbilScore * dmgMult));
-        const ax = { ...a, _dmgMult: dmgMult };
-        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + (a.masterwork && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
-        let dmg = dmgAbil + (Number(a.enhancement) || 0) + (Number(a.damageBonus) || 0) + dmgMods + (kind === 'melee' ? dmgMelee : dmgRanged);
+        const ax = { ...a, _dmgMult: dmgMult, ...(house?.weaponGroups && !a.natural ? { weaponGroup: weaponGroup(a.name) } : {}) };
+        const wmat = a.natural ? {} : (WEAPON_MATERIALS[a.material || ''] || {});
+        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + ((a.masterwork || wmat.mw) && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
+        let dmg = dmgAbil + (wmat.dmg || 0) + (Number(a.enhancement) || 0) + (Number(a.damageBonus) || 0) + dmgMods + (kind === 'melee' ? dmgMelee : dmgRanged);
         let critRange = Number(a.critRange) || 20;
         let diceSteps = 0;
         let extraAttacks = 0;
@@ -526,6 +549,8 @@ export function compute(def, db) {
           dmg += r.dmg || 0;
           if (r.doubleThreat) critRange = 21 - (21 - critRange) * 2;
           if (r.dice) ax._dice = r.dice;
+          if (r.note) (ax._notes = ax._notes || []).push(r.note);
+          if (r.extraDamageRolls) ax._extraRolls = (ax._extraRolls || 0) + r.extraDamageRolls;
           diceSteps += r.diceSteps || 0;
           extraAttacks += r.extraAttacks || 0;
         }
@@ -551,7 +576,8 @@ export function compute(def, db) {
         const label = count > 1 ? `${count} ${a.plural || pluralize(a.name)}` : a.name;
         const enh = Number(a.enhancement) || 0;
         const specialWords = (a.specials || []).map((x) => x.toLowerCase()).join(' ');
-        const prefix = (!a.natural && !/^[+]\d/.test(a.name) ? (enh ? `+${enh} ` : a.masterwork ? 'mwk ' : '') : '') + (specialWords && !a.natural ? `${specialWords} ` : '');
+        const matWord = wmat.name && a.material ? `${wmat.label || wmat.name} ` : '';
+        const prefix = (!a.natural && !/^[+]\d/.test(a.name) ? (enh ? `+${enh} ` : a.masterwork && !wmat.mw ? 'mwk ' : '') : '') + (specialWords && !a.natural ? `${specialWords} ` : '') + matWord;
         const crit = (critRange < 20 ? `/${critRange}–20` : '') + (Number(a.critMult) > 2 ? `/×${a.critMult}` : '');
         const riders = [];
         if (!a.natural) {
@@ -561,14 +587,15 @@ export function compute(def, db) {
             if (r) riders.push(r);
           }
           for (const it of wornItems) if (it.rider) riders.push(it.rider);
+          if (wmat.rider) riders.push(wmat.rider(a));
         }
         const extraTxt = (a.extra || '').trim().replace(/^plus\s+/i, '');
         if (extraTxt) riders.push(extraTxt);
         const dmgStr = `${dice}${dmg ? sign(dmg) : ''}${crit}${riders.length ? ` plus ${riders.join(' and ')}` : ''}`;
         const touch = a.touch ? ' touch' : '';
-        const text = `${prefix}${label} ${seq.map(sign).join('/')}${touch} (${dmgStr})`;
+        const text = `${prefix}${label} ${seq.map(sign).join('/')}${touch} (${dmgStr})${ax._notes ? ` (${ax._notes.join('; ')})` : ''}`;
         parts.push(text);
-        out.attackDetails.push({ id: a.id, text, att: seq[0], dmgAvg: avgDice(dice) + dmg, count: count * seq.length, kind });
+        out.attackDetails.push({ id: a.id, text, att: seq[0], dmgAvg: avgDice(dice) + dmg, count: count * seq.length + (ax._extraRolls || 0), kind });
       }
       out.attacks[kind].push(parts.join(', '));
     }
@@ -685,6 +712,7 @@ export function compute(def, db) {
     for (const [el, v] of Object.entries(st.resist || {})) { const k = elKey(el); if (k) resistAmt[k] = Math.max(resistAmt[k] || 0, v); }
   }
   for (const it of wornItems) for (const el of it.strong || []) applyFrom(el, 'strong');
+  for (const [el, v] of materialResist) { const k = elKey(el); if (k) resistAmt[k] = Math.max(resistAmt[k] || 0, v); }
   // weakness vs immunity from multiple sources: immunity wins (rank)
   for (const el of EL) {
     const o = d.elementOverrides?.[el];

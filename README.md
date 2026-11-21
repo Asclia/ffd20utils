@@ -63,6 +63,24 @@ entram a linha *Legendary Actions 3/round* em OFFENSE e as seções LEGENDARY AC
 - **Arquétipos** trocam as características substituídas e as perícias de classe que adicionam ou removem.
 - Pré-requisitos de feat checam também nível de classe ("fighter level 4th") e feats concedidos pela classe.
 
+### Regras da casa: Moogle in the Room / Elephant in the Room
+
+Em *Biblioteca → Regras da casa* liga o [Moogle in the Room](https://finalfantasyd20.com/system-rules/optional-systems/moogle-in-the-room/)
+(a versão FFd20 do Elephant in the Room), com cada regra ligável à parte: Weapon Focus & cia. por grupo de armas,
+finesse e Agile Maneuvers sem feat, Power Attack/Deadly Aim/Piranha Strike/Combat Expertise como opções de combate
+(aparecem em *Estados de combate*), Unarmed Combatant, Deft/Powerful Maneuvers, Point-Blank Shot removido (Precise
+Shot vira o pré-requisito), Dodge com Mobility, Greater TWF com Improved TWF. Feats que deixam de existir somem da
+busca e geram aviso; pré-requisitos e a montagem automática seguem as regras.
+
+### Materiais especiais e arquearia
+
+- Armas e armaduras têm **material**: adamantine (RD na armadura), mithral (Des máx. +2, penalidade −3, uma categoria
+  mais leve), cold iron, alchemical silver (−1 dano), darkwood, dragonhide e os cristais do FFd20 (living crystal:
+  sangramento; elemental crystal: +1d6 do elemento na arma, resistência na armadura). Preço, obra-prima e nome no
+  statblock são automáticos.
+- **Manyshot** aparece na linha de ataque (primeiro ataque com duas flechas) e o **Quick Shot** do Archer acrescenta o
+  ataque extra com −2 (desligável em *Estados de combate*).
+
 ## Montagem automática de NPC
 
 Na seção **⚡ Montagem automática** do editor de NPC, escolha o papel (detectado pela classe: combatente,

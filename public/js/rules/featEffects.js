@@ -15,7 +15,7 @@ const matchWeapon = (atk, param) => {
   if (!param) return false;
   const p = param.toLowerCase().replace(/s$/, '').trim();
   const n = (atk.name || '').toLowerCase();
-  return n.includes(p) || (typeof atk.weaponGroup === 'string' && atk.weaponGroup.toLowerCase() === p) || p === 'all' || (p === 'unarmed strike' && n.includes('unarmed'));
+  return n.includes(p) || (typeof atk.weaponGroup === 'string' && atk.weaponGroup.toLowerCase().replace(/s$/, '') === p) || p === 'all' || (p === 'unarmed strike' && n.includes('unarmed'));
 };
 const skillPair = (a, b) => ({
   mods: (ctx) => [a, b].map((s) => ({ target: `skill:${s}`, value: ctx.skillRanks(s) >= 10 ? 4 : 2, type: 'untyped', source: 'feat' })),
@@ -67,6 +67,19 @@ export const FEAT_EFFECTS = {
     toggle: 'Alvo a até 30 ft. (Point-Blank Shot)',
     note: '+1 ataque e dano à distância a até 30 ft.',
     attack: (ctx, atk, f, on) => (on && atk.kind === 'ranged' ? { att: 1, dmg: 1 } : null),
+  },
+  // ------------------------------------------------ Moogle in the Room / Elephant in the Room feats
+  'unarmed combatant': {
+    note: 'Desarmado 1d6 (Médio)/1d4 (Pequeno), +2 para agarrar e +2 na DMC contra agarrar.',
+    mods: () => [{ target: 'cmb', value: 2, cond: 'to grapple', source: 'Unarmed Combatant' }, { target: 'cmd', value: 2, cond: 'vs. grapple', source: 'Unarmed Combatant' }],
+    attack: (ctx, atk) => (/unarmed/i.test(atk.name) && /^1d[23]$/.test(String(atk.dice)) ? { dice: '1d6' } : null),
+  },
+  'deft maneuvers': { note: '+2 em trip, disarm, dirty trick, reposition e steal; finta como ação de movimento.', mods: () => [{ target: 'cmb', value: 2, cond: 'to trip, disarm, dirty trick, reposition or steal', source: 'Deft Maneuvers' }] },
+  'powerful maneuvers': { note: '+2 em bull rush, drag, overrun e sunder.', mods: () => [{ target: 'cmb', value: 2, cond: 'to bull rush, drag, overrun or sunder', source: 'Powerful Maneuvers' }] },
+  manyshot: {
+    toggle: 'Usar Manyshot',
+    note: 'No ataque total com arco, o primeiro ataque dispara duas flechas (dano das duas se acertar; precisão e crítico só uma vez).',
+    attack: (ctx, atk, f, on) => (on && atk.kind === 'ranged' && /bow/i.test(atk.name) && !/crossbow/i.test(atk.name) ? { note: 'Manyshot: first attack fires two arrows', extraDamageRolls: 1 } : null),
   },
   'rapid shot': {
     toggle: 'Usar Rapid Shot',

@@ -7,7 +7,20 @@ import { MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { SKILLS } from '../rules/skills.js';
 import {
   SLOTS, slotKind, ARMORS, SHIELDS, classicItems, makeItem, parseItemEffects, weaponPrice, armorPrice, gearSummary, emptyEquipment, specialBonus,
+  WEAPON_MATERIALS, ARMOR_MATERIALS,
 } from '../rules/equipment.js';
+import { elementsFor, elementNamePT } from '../rules/types.js';
+
+// special materials available in this system (FFd20 crystals only in FFd20)
+const matOptions = (table, system, shield) => Object.entries(table)
+  .filter(([, m]) => (!m.ff || system !== 'pf1e') && (!m.shieldOnly || shield))
+  .map(([k, m]) => [k, k ? m.name : 'material: normal']);
+function MaterialPicker({ table, value, element, system, shield, onChange }) {
+  const m = table[value || ''] || {};
+  return html`<label class="inline">${'material'} <${Select} value=${value || ''} onChange=${(v) => onChange({ material: v })} options=${matOptions(table, system, shield)} /></label>
+    ${m.element ? html`<${Select} value=${element || elementsFor(system)[0]} onChange=${(v) => onChange({ materialElement: v })} options=${elementsFor(system).map((e) => [e, elementNamePT(system, e)])} />` : null}
+    ${m.note ? html`<span class="small muted">${m.note}</span>` : null}`;
+}
 
 const gil = (n) => `${Number(n || 0).toLocaleString('pt-BR')} gil`;
 const ENH = [[0, '—'], [1, '+1'], [2, '+2'], [3, '+3'], [4, '+4'], [5, '+5']];
@@ -28,15 +41,15 @@ export function EquipmentSection({ def, up, c, db }) {
     <h4>Armas</h4>
     <${ListEditor} items=${weapons} empty="Nenhuma arma. Adicione abaixo (também aparecem em Ataque e Deslocamento)."
       onChange=${(list) => up({ attacks: [...def.attacks.filter((a) => a.natural), ...list] })}
-      render=${(a, set) => html`<${WeaponItem} a=${a} set=${set} specials=${items.weaponSpecials || []} c=${c} />`} />
+      render=${(a, set) => html`<${WeaponItem} a=${a} set=${set} specials=${items.weaponSpecials || []} c=${c} system=${def.system} />`} />
     <${Select} value="" onChange=${(name) => addWeapon(name, def, up, items)} options=${[{ value: '', label: '+ Arma…' },
       ...WEAPONS.map((w) => ({ value: `pf:${w.name}`, label: `${w.name} (${w.dice})`, group: 'Pathfinder' })),
       ...(items.weapons || []).filter((w) => w.dice && w.dice !== '—').map((w) => ({ value: `ff:${w.name}`, label: `${w.name} (${w.dice})`, group: 'FFd20' }))]} />
 
     <h4>Armadura e escudo</h4>
     <div class="armor-grid">
-      <${ArmorItem} label="Armadura" it=${eq.armor} presets=${ARMORS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ armor: v })} />
-      <${ArmorItem} label="Escudo" it=${eq.shield} presets=${SHIELDS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ shield: v })} shield />
+      <${ArmorItem} label="Armadura" it=${eq.armor} presets=${ARMORS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ armor: v })} system=${def.system} />
+      <${ArmorItem} label="Escudo" it=${eq.shield} presets=${SHIELDS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ shield: v })} shield system=${def.system} />
     </div>
 
     <h4>Slots do corpo</h4>
@@ -88,7 +101,7 @@ function addWeapon(key, def, up, items) {
   up({ attacks: [...def.attacks, a] });
 }
 
-function WeaponItem({ a, set, specials, c }) {
+function WeaponItem({ a, set, specials, c, system }) {
   const det = c.attackDetails.find((x) => x.id === a.id);
   const bonus = (Number(a.enhancement) || 0) + (a.specials || []).reduce((s, n) => s + specialBonus(specials.find((x) => x.name === n)?.cost), 0);
   return html`<div class="ability-row">
@@ -101,6 +114,7 @@ function WeaponItem({ a, set, specials, c }) {
       ${bonus > 10 ? html`<span class="warn small">bônus total +${bonus} acima de +10</span>` : null}
       <${Check} label="fora do Gear" checked=${a.notGear} onChange=${(v) => set({ notGear: v })} title="Não listar em Other Gear (ex.: arma natural/integrada)" />
     </div>
+    <div class="row wrap"><${MaterialPicker} table=${WEAPON_MATERIALS} value=${a.material} element=${a.materialElement} system=${system} onChange=${set} /></div>
     <div class="row wrap">
       <${Chips} items=${a.specials || []} onRemove=${(x) => set({ specials: a.specials.filter((y) => y !== x) })} />
       <${Select} value="" onChange=${(v) => v && set({ specials: [...new Set([...(a.specials || []), v])] })}
@@ -111,12 +125,12 @@ function WeaponItem({ a, set, specials, c }) {
   </div>`;
 }
 
-function ArmorItem({ label, it, presets, specials, onChange, shield }) {
+function ArmorItem({ label, it, presets, specials, onChange, shield, system }) {
   const pick = (name) => {
     if (name === '') return onChange(null);
-    if (name === '__custom') return onChange({ name: shield ? 'shield' : 'armor', bonus: shield ? 1 : 2, maxDex: shield ? null : 6, acp: 0, enh: 0, specials: [], price: 0 });
+    if (name === '__custom') return onChange({ name: shield ? 'shield' : 'armor', bonus: shield ? 1 : 2, maxDex: shield ? null : 6, acp: 0, enh: 0, specials: [], price: 0, isShield: !!shield });
     const p = presets.find((x) => x.name === name);
-    onChange({ name: p.name, bonus: p.bonus, maxDex: p.maxDex, acp: p.acp, enh: it?.enh || 0, masterwork: it?.masterwork || false, specials: it?.specials || [], price: p.price });
+    onChange({ name: p.name, bonus: p.bonus, maxDex: p.maxDex, acp: p.acp, enh: it?.enh || 0, masterwork: it?.masterwork || false, specials: it?.specials || [], price: p.price, material: it?.material || '', materialElement: it?.materialElement, isShield: !!shield });
   };
   const set = (patch) => onChange({ ...it, ...patch });
   return html`<div class="armor-card">
@@ -133,8 +147,9 @@ function ArmorItem({ label, it, presets, specials, onChange, shield }) {
         <label class="inline">Des máx <${Num} value=${it.maxDex} allowEmpty onInput=${(v) => set({ maxDex: v })} /></label>
         <label class="inline">penalid. <${Num} value=${it.acp} onInput=${(v) => set({ acp: v })} /></label>
         <${Check} label="obra-prima" checked=${it.masterwork || Number(it.enh) > 0} onChange=${(v) => set({ masterwork: v })} />
-        <span class="src-badge">${gil(armorPrice(it, specials))}</span>
+        <span class="src-badge">${gil(armorPrice({ ...it, isShield: !!shield }, specials))}</span>
       </div>
+      <div class="row wrap"><${MaterialPicker} table=${ARMOR_MATERIALS} value=${it.material} element=${it.materialElement} system=${system} shield=${shield} onChange=${set} /></div>
       <${Chips} items=${it.specials || []} onRemove=${(x) => set({ specials: it.specials.filter((y) => y !== x) })} />
       <${Select} value="" onChange=${(v) => v && set({ specials: [...new Set([...(it.specials || []), v])] })}
         options=${[{ value: '', label: '+ habilidade especial' }, ...specials.map((s) => ({ value: s.name, label: `${s.name} (${s.cost})` }))]} />` : null}
