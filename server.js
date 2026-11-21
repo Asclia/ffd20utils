@@ -150,6 +150,22 @@ async function mergeLibrary(from, to) {
   return { copied };
 }
 
+// Images folder for vault exports: an absolute path, or a path relative to the vault root (the folder that
+// contains ".obsidian", searched upwards from the export folder), e.g. "Resources/z_images/Bestiary".
+// Without a vault root, relative paths are taken from the export folder.
+async function imagesDirFor(exportDir, setting) {
+  const rel = String(setting || 'attachments').trim();
+  if (path.isAbsolute(rel)) return rel;
+  let cur = exportDir;
+  for (let i = 0; i < 12; i++) {
+    if (fs.existsSync(path.join(cur, '.obsidian'))) return path.join(cur, ...rel.split(/[\\/]+/).filter(Boolean).map(sanitizeFileName));
+    const up = path.dirname(cur);
+    if (up === cur) break;
+    cur = up;
+  }
+  return path.join(exportDir, ...rel.split(/[\\/]+/).filter(Boolean).map(sanitizeFileName));
+}
+
 function sanitizeFileName(name) {
   return String(name || 'statblock').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'statblock';
 }
@@ -262,10 +278,11 @@ async function api(req, res, url) {
     for (const f of body.files || []) {
       let content = String(f.content || '');
       if (f.image && /^\/userdata\/images\/[A-Za-z0-9]+\.[a-z]+$/.test(f.image)) {
-        const imgName = path.basename(f.image);
-        const attachDir = path.join(dir, settings.attachmentsFolder || 'attachments');
+        const src = path.basename(f.image);
+        const imgName = `${sanitizeFileName(f.name)}${path.extname(src)}`; // named after the creature
+        const attachDir = await imagesDirFor(dir, settings.attachmentsFolder);
         await fsp.mkdir(attachDir, { recursive: true });
-        await fsp.copyFile(path.join(IMAGES, imgName), path.join(attachDir, imgName));
+        await fsp.copyFile(path.join(IMAGES, src), path.join(attachDir, imgName));
         content = content.split('{{IMAGE}}').join(imgName);
       }
       const out = path.join(sub, `${sanitizeFileName(f.name)}.md`);

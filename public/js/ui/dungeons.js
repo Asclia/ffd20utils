@@ -197,8 +197,10 @@ function DungeonEditor({ app, idx, doc, setDoc, dirty, onSave, onDelete, onOpenE
   const exportMD = () => mapToPNG(doc, { style: doc.mapStyle }).toBlob(async (b) => {
     const name = fileSafe(doc.name || 'masmorra');
     const png = new Uint8Array(await b.arrayBuffer());
-    download(`${name}.zip`, makeZip([{ name: `${name}.md`, data: dungeonMarkdown(doc, `attachments/${name}.png`) }, { name: `attachments/${name}.png`, data: png }]));
-    toast('ZIP com o .md e o mapa gerado (extraia dentro do vault).');
+    const f = String(app.settings?.attachmentsFolder || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const imgDir = f && !/^[A-Za-z]:|^\//.test(app.settings?.attachmentsFolder || '') ? f : 'attachments';
+    download(`${name}.zip`, makeZip([{ name: `${name}.md`, data: dungeonMarkdown(doc, `${name}.png`, true) }, { name: `${imgDir}/${name}.png`, data: png }]));
+    toast(`ZIP com o .md e o mapa (em ${imgDir}/) gerado — extraia na raiz do vault.`);
   });
 
   if (!doc.map) return null;
@@ -299,9 +301,9 @@ function RoomPanel({ room, setRoom, reroll, onDelete, onOpen }) {
   </div>`;
 }
 
-export function dungeonMarkdown(d, imagePath) {
+export function dungeonMarkdown(d, imagePath, wiki = false) {
   const lines = ['---', `name: ${JSON.stringify(d.name || 'Masmorra')}`, `system: ${JSON.stringify(SYSTEMS[d.system] || d.system)}`, `party_level: ${d.partyLevel}`, 'tags: ["compendium", "dungeon"]', '---', '', `# ${d.name || 'Masmorra'}`, ''];
-  if (imagePath) lines.push(`![Mapa](${imagePath.replace(/ /g, '%20')})`, '');
+  if (imagePath) lines.push(wiki ? `![[${imagePath}]]` : `![Mapa](${imagePath.replace(/ /g, '%20')})`, '');
   lines.push('## Visão geral', '');
   for (const [k, label] of OVERVIEW_FIELDS) if (d.overview?.[k]) lines.push(`- **${label}:** ${d.overview[k]}`);
   if (d.notes) lines.push('', d.notes);
@@ -315,7 +317,7 @@ export function dungeonMarkdown(d, imagePath) {
     if (q.notes) lines.push('', q.notes);
     lines.push('');
   }
-  lines.push('---', '*Tabelas aleatórias: Maze Rats (Ben Milton, CC BY 4.0); Ironsworn: Delve (Shawn Tomkin, CC BY 4.0); Pathfinder Roleplaying Game (Paizo, OGL 1.0a).*');
+  lines.push('', '*Tabelas aleatórias: Maze Rats (Ben Milton, CC BY 4.0); Ironsworn: Delve (Shawn Tomkin, CC BY 4.0); Pathfinder Roleplaying Game (Paizo, OGL 1.0a).*');
   return lines.join('\n') + '\n';
 }
 

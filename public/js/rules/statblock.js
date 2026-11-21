@@ -219,7 +219,7 @@ export function statblockMarkdown(blocks, d, c, opts = {}) {
       case 'plain': lines.push(mdInline(b.text) + '  '); break;
       case 'line': lines.push(`**${b.label}** ${mdInline(b.text)}  `); break;
       case 'indent': lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${mdInline(b.text)}  `); break;
-      case 'section': lines.push('', `### ${b.title.toUpperCase()}`, '---'); break;
+      case 'section': lines.push('', `### ${b.title.toUpperCase()}`); break;
       case 'ability': {
         const head = `**${b.name}${b.kind ? ` (${b.kind})` : ''}**`;
         const body = b.text.replace(/\n/g, '  \n');

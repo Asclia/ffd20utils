@@ -118,6 +118,12 @@ Se o aplicativo de sincronização trouxer alterações com o programa aberto, a
 - **Enviar ao vault:** configure a pasta do seu vault em *Biblioteca → Configurações*; o programa grava os `.md` direto lá (opcionalmente mantendo a estrutura de pastas) e copia as imagens para a subpasta de anexos, usando `![[imagem]]`.
 - **Backup JSON** de tudo (statblocks, pastas e homebrew) e importação.
 
+
+As imagens vão para a **Pasta de imagens no vault** (*Biblioteca → Configurações*), relativa à raiz do vault
+(a pasta que tem `.obsidian`), por exemplo `Resources/z_images/Bestiary`, ou um caminho completo. Cada imagem
+recebe o nome da criatura e entra no `.md` como `![[Cerberus.png]]`. Nos ZIPs, a imagem vai no mesmo caminho:
+extraia o ZIP na raiz do vault.
+
 ## Dados das regras
 
 Os arquivos em `public/data/` foram gerados a partir de

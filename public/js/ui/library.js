@@ -166,7 +166,9 @@ function Settings({ app }) {
       <${Field} label="Pasta de exportação (ex.: seu vault do Obsidian) — vale só para este computador" wide>
         <div class="row"><${Text} value=${s.exportDir || ''} placeholder=${'C:\\Users\\voce\\Obsidian\\Bestiario  ou  /home/voce/Obsidian/Bestiario'} onInput=${(v) => setS({ ...s, exportDir: v })} />
         ${window.ffd20Desktop ? html`<button class="btn small" onClick=${async () => { const d = await window.ffd20Desktop.pickFolder('Pasta do vault do Obsidian'); if (d) setS({ ...s, exportDir: d }); }}>Escolher…</button>` : null}</div></${Field}>
-      <${Field} label="Subpasta de imagens"><${Text} value=${s.attachmentsFolder || ''} placeholder="attachments" onInput=${(v) => setS({ ...s, attachmentsFolder: v })} /></${Field}>
+      <${Field} label="Pasta de imagens no vault" wide hint="Relativa à raiz do vault (a pasta que tem .obsidian), ex.: Resources/z_images/Bestiary — ou um caminho completo. As imagens recebem o nome da criatura e entram no .md como ![[imagem]].">
+        <div class="row"><${Text} value=${s.attachmentsFolder || ''} placeholder="Resources/z_images/Bestiary" onInput=${(v) => setS({ ...s, attachmentsFolder: v })} />
+        ${window.ffd20Desktop ? html`<button class="btn small" onClick=${async () => { const d = await window.ffd20Desktop.pickFolder('Pasta de imagens do vault'); if (d) setS({ ...s, attachmentsFolder: d }); }}>Escolher…</button>` : null}</div></${Field}>
       <${Field} label="Sistema padrão para criaturas novas"><${Select} value=${s.defaultSystem || 'ffd20'} onChange=${(v) => setS({ ...s, defaultSystem: v })} options=${[['ffd20', 'Final Fantasy d20'], ['pf1e', 'Pathfinder 1e']]} /></${Field}>
       <${Check} label="Manter a estrutura de pastas da biblioteca ao enviar ao vault" checked=${s.keepFolders} onChange=${(v) => setS({ ...s, keepFolders: v })} />
       <${Check} label="O botão 'Exportar .md' grava direto no vault" checked=${s.preferVault} onChange=${(v) => setS({ ...s, preferVault: v })} />

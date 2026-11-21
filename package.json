@@ -1,6 +1,6 @@
 {
   "name": "ffd20utils",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "Compendium — criador de monstros, NPCs e masmorras para Final Fantasy d20 (FFd20) e Pathfinder 1e.",
   "type": "module",
   "private": true,

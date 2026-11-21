@@ -6,6 +6,8 @@ import { toast } from './ui/components.js';
 import { loadAppearance } from './ui/appearance.js';
 
 const isLocal = (src) => src && (src.startsWith('/userdata/') || src.startsWith('data:'));
+// images folder inside ZIP exports: the vault images folder from the settings (when relative) or "attachments"
+const zipImageDir = (app) => { const f = String(app.settings?.attachmentsFolder || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''); return f && !/^[A-Za-z]:|^\//.test(app.settings?.attachmentsFolder || '') ? f : 'attachments'; };
 
 export function markdownFor(app, def, c, opts = {}) {
   const comp = c || compute(def, { ...app.db, homebrew: app.homebrew });
@@ -25,9 +27,9 @@ export async function exportMarkdown(app, def, c) {
     const ext = extFromUrl(src);
     const imgName = `${name}${ext}`;
     const bytes = src.startsWith('data:') ? dataUrlBytes(src) : await fetchBytes(src);
-    const md = markdownFor(app, def, c, { imagePath: `attachments/${imgName}`, wikiImage: false });
-    download(`${name}.zip`, makeZip([{ name: `${name}.md`, data: md }, { name: `attachments/${imgName}`, data: bytes }]));
-    toast('ZIP com .md e imagem gerado (extraia dentro do vault).');
+    const md = markdownFor(app, def, c, { imagePath: imgName, wikiImage: true });
+    download(`${name}.zip`, makeZip([{ name: `${name}.md`, data: md }, { name: `${zipImageDir(app)}/${imgName}`, data: bytes }]));
+    toast(`ZIP com .md e imagem (em ${zipImageDir(app)}/) gerado — extraia na raiz do vault.`);
   } catch (e) {
     toast(`Não consegui incluir a imagem (${e.message}); exportando só o .md.`, 'error');
     download(`${name}.md`, markdownFor(app, def, c));
@@ -50,11 +52,10 @@ export async function exportManyZip(app, entries, folderPathOf) {
     if (isLocal(src)) {
       try {
         const ext = extFromUrl(src);
-        const imgName = `${fileSafe(def.id)}${ext}`;
+        const imgName = `${base}${ext}`;
         const bytes = src.startsWith('data:') ? dataUrlBytes(src) : await fetchBytes(src);
-        files.push({ name: `attachments/${imgName}`, data: bytes });
-        const depth = dir ? dir.split('/').length : 0;
-        opts = { imagePath: `${'../'.repeat(depth)}attachments/${imgName}` };
+        files.push({ name: `${zipImageDir(app)}/${imgName}`, data: bytes });
+        opts = { imagePath: imgName, wikiImage: true };
       } catch { /* skip image */ }
     }
     files.push({ name: `${path}.md`, data: markdownFor(app, def, null, opts) });
