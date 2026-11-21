@@ -145,4 +145,20 @@ t('Improved Natural Attack follows the d8 chain (2d8 → 3d8, 1d10 → 2d8, 1d8 
   }
 });
 
+t('Legendary and Lair Actions sections', () => {
+  const d = { ...newCreature('monster'), name: 'Bahamut', cr: 10 };
+  d.legendary = { enabled: true, perRound: 3, intro: '', actions: [{ id: 'a', name: 'Tail Attack', cost: 1, text: 'Bahamut makes a tail attack.' }, { id: 'b', name: 'Mega Flare', cost: 3, text: 'Fire burst, DC {dcCon} Reflex half.' }] };
+  d.lair = { enabled: true, initiative: 20, intro: '', actions: [{ id: 'c', name: '', text: 'Gravity crushes everyone in the lair.' }] };
+  const c = compute(d, db);
+  const out = md(d, c);
+  assert.match(out, /\*\*Legendary Actions\*\* 3\/round/);
+  assert.match(out, /### LEGENDARY ACTIONS\nBahamut can take 3 legendary actions/);
+  assert.match(out, /\*\*Mega Flare \(Costs 3 Actions\)\*\*/);
+  assert.match(out, new RegExp(`DC ${c.tpl.dcCon} Reflex`));
+  assert.match(out, /### LAIR ACTIONS\nOn initiative count 20/);
+  assert.match(out, /• Gravity crushes/);
+  d.legendary.enabled = false; d.lair.enabled = false;
+  assert.doesNotMatch(md(d, compute(d, db)), /LEGENDARY|LAIR/);
+});
+
 console.log(`${passed} class-effect tests passed`);

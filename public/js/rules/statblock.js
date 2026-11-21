@@ -71,6 +71,7 @@ export function buildStatblock(d, c, db) {
   // FFd20 NPC stat blocks: activated abilities get their own line under Special Attacks
   const sab = c.specialAbilities.filter((a) => a.placement === 'specialAbility').map((a) => a.short || a.name.toLowerCase());
   line('Special Abilities', sab.join(', '));
+  if (c.legendary) line('Legendary Actions', `${c.legendary.perRound}/round`);
   // spell-like abilities
   const sla = (d.caster?.sla || []).filter((x) => x.name);
   if (sla.length) {
@@ -145,6 +146,21 @@ export function buildStatblock(d, c, db) {
     for (const b of c.burst) B.push({ t: 'ability', name: b.name || 'Burst Mode', kind: b.kind || 'Su', text: `${b.text || ''}${b.text ? ' ' : ''}(Swift action at 50% HP or less; ${b.uses}/day; lasts ${b.duration}.)` });
     for (const a of detailed) B.push({ t: 'ability', name: a.name, kind: a.kind, text: a.text });
     if (d.showLimitBreakText) for (const l of c.limitBreaks) B.push({ t: 'ability', name: l.name, kind: l.type, text: l.text });
+  }
+
+  // ---------------- legendary & lair actions
+  if (c.legendary) {
+    section('Legendary Actions');
+    B.push({ t: 'text', text: c.legendary.intro });
+    for (const a of c.legendary.actions) B.push({ t: 'ability', name: `${a.name || 'Action'}${a.cost > 1 ? ` (Costs ${a.cost} Actions)` : ''}`, kind: a.kind || '', text: a.text || '' });
+  }
+  if (c.lair) {
+    section('Lair Actions');
+    B.push({ t: 'text', text: c.lair.intro });
+    for (const a of c.lair.actions) {
+      if (a.name) B.push({ t: 'ability', name: a.name, kind: '', text: a.text || '' });
+      else B.push({ t: 'text', text: `• ${a.text}` });
+    }
   }
 
   // ---------------- ecology

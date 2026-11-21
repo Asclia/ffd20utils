@@ -64,6 +64,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
         <${SkillsSection} def=${def} up=${up} c=${c} npc=${npc} />
         <${MagicSection} def=${def} up=${up} upIn=${upIn} c=${c} db=${db} npc=${npc} />
         <${AbilitiesListSection} def=${def} up=${up} c=${c} homebrew=${homebrew} db=${db} />
+        <${LegendarySection} def=${def} up=${up} c=${c} />
         ${(def.boss === 'boss' || def.boss === 'super') ? html`<${BossSection} def=${def} up=${up} c=${c} />` : null}
         <${ModifiersSection} def=${def} up=${up} />
         <${ExtrasSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
@@ -246,6 +247,49 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
         </${Field}>` : html`
         <${Field} label="Limit Breaks"><${Check} label="Usa Limit Breaks das classes" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
     </div>
+  </${Section}>`;
+}
+
+// ------------------------------------------------------------------ legendary & lair actions
+const LEGENDARY0 = { enabled: false, perRound: 3, intro: '', actions: [] };
+const LAIR0 = { enabled: false, initiative: 20, intro: '', actions: [] };
+function LegendarySection({ def, up, c }) {
+  const lg = { ...LEGENDARY0, ...(def.legendary || {}) };
+  const lr = { ...LAIR0, ...(def.lair || {}) };
+  const setLg = (p) => up({ legendary: { ...lg, ...p } });
+  const setLr = (p) => up({ lair: { ...lr, ...p } });
+  const badge = [lg.enabled ? `${lg.actions.length} lendária(s)` : '', lr.enabled ? `${lr.actions.length} de covil` : ''].filter(Boolean).join(' · ');
+  return html`<${Section} title="Legendary e Lair Actions" id="legendary" badge=${badge} open=${lg.enabled || lr.enabled}>
+    <div class="muted small">Seções próprias no fim do statblock. Use {dcCon}, {dcCha}, {dcMental}, {hd}, {cl}… nos textos para valores calculados.</div>
+    <h4>Legendary Actions</h4>
+    <div class="row wrap">
+      <${Check} label="Tem ações lendárias" checked=${lg.enabled} onChange=${(v) => setLg({ enabled: v })} />
+      ${lg.enabled ? html`<label class="inline">ações por rodada <${Num} value=${lg.perRound} min=${1} max=${10} onInput=${(v) => setLg({ perRound: v || 1 })} /></label>` : null}
+    </div>
+    ${lg.enabled ? html`
+      <textarea rows="2" value=${lg.intro} placeholder=${c.legendary?.intro || 'Texto de introdução (automático se vazio)'} onInput=${(e) => setLg({ intro: e.target.value })}></textarea>
+      <${ListEditor} items=${lg.actions} onChange=${(v) => setLg({ actions: v })} addLabel="+ Ação lendária" empty="Nenhuma ação lendária."
+        onAdd=${() => setLg({ actions: [...lg.actions, { id: uid(), name: '', cost: 1, text: '' }] })}
+        render=${(a, set) => html`<div class="ability-row">
+          <div class="row wrap">
+            <input type="text" class="w-name" value=${a.name} placeholder="Nome (ex.: Tail Attack)" onInput=${(e) => set({ name: e.target.value })} />
+            <${Select} value=${String(a.cost || 1)} onChange=${(v) => set({ cost: Number(v) })} options=${[['1', 'custa 1 ação'], ['2', 'custa 2 ações'], ['3', 'custa 3 ações']]} />
+          </div>
+          <textarea rows="2" value=${a.text} placeholder="Efeito (ex.: The dragon makes a tail attack.)" onInput=${(e) => set({ text: e.target.value })}></textarea>
+        </div>`} />` : null}
+    <h4>Lair Actions</h4>
+    <div class="row wrap">
+      <${Check} label="Tem ações de covil" checked=${lr.enabled} onChange=${(v) => setLr({ enabled: v })} />
+      ${lr.enabled ? html`<label class="inline">contagem de iniciativa <${Num} value=${lr.initiative} min=${1} max=${40} onInput=${(v) => setLr({ initiative: v || 20 })} /></label>` : null}
+    </div>
+    ${lr.enabled ? html`
+      <textarea rows="2" value=${lr.intro} placeholder=${c.lair?.intro || 'Texto de introdução (automático se vazio)'} onInput=${(e) => setLr({ intro: e.target.value })}></textarea>
+      <${ListEditor} items=${lr.actions} onChange=${(v) => setLr({ actions: v })} addLabel="+ Ação de covil" empty="Nenhuma ação de covil."
+        onAdd=${() => setLr({ actions: [...lr.actions, { id: uid(), name: '', text: '' }] })}
+        render=${(a, set) => html`<div class="ability-row">
+          <input type="text" class="w-name" value=${a.name} placeholder="Nome (opcional — sem nome vira um item de lista)" onInput=${(e) => set({ name: e.target.value })} />
+          <textarea rows="2" value=${a.text} placeholder="Efeito (ex.: Magma erupts from a point on the ground… DC {dcCon} Reflex save)" onInput=${(e) => set({ text: e.target.value })}></textarea>
+        </div>`} />` : null}
   </${Section}>`;
 }
 

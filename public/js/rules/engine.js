@@ -44,6 +44,8 @@ export function newCreature(mode = 'monster', system = 'ffd20') {
     caster: { tier: 'none', ability: 'int', mpBonus: 0, cl: null, spells: [], sla: [], slaCL: null, listName: '', pfClass: '', pfLevel: 0 },
     classFeatures: {}, limitBreaksEnabled: false, pcWealth: false,
     abilitiesList: [], modifiers: [], equipment: emptyEquipment(), talents: [],
+    legendary: { enabled: false, perRound: 3, intro: '', actions: [] },
+    lair: { enabled: false, initiative: 20, intro: '', actions: [] },
     tactics: { before: '', during: '', morale: '' },
     statusInflicts: '',
     createdAt: Date.now(), updatedAt: Date.now(),
@@ -819,6 +821,20 @@ export function compute(def, db) {
     for (const b of d.burst || []) out.burst.push({ ...b, uses: b.uses || burstUses(hd), duration: b.duration || `${burstDuration(hd)} rounds` });
   }
   out.specialAbilities = abilities.map((a) => ({ ...a, short: fillTemplate(a.short, out), text: fillTemplate(a.text, out) }));
+  // ---- legendary and lair actions ({dcCon}, {hd}… work in their texts too)
+  const who = d.name || 'The creature';
+  const lg = d.legendary;
+  out.legendary = lg?.enabled ? {
+    perRound: Number(lg.perRound) || 3,
+    intro: fillTemplate(lg.intro || `${who} can take ${Number(lg.perRound) || 3} legendary actions, choosing from the options below. Only one legendary action can be used at a time and only at the end of another creature's turn. ${who} regains spent legendary actions at the start of its turn.`, out),
+    actions: (lg.actions || []).filter((a) => a.name || a.text).map((a) => ({ ...a, cost: Number(a.cost) || 1, text: fillTemplate(a.text, out) })),
+  } : null;
+  const lr = d.lair;
+  out.lair = lr?.enabled ? {
+    initiative: Number(lr.initiative) || 20,
+    intro: fillTemplate(lr.intro || `On initiative count ${Number(lr.initiative) || 20} (losing initiative ties), ${who} takes a lair action to cause one of the following effects; it can't use the same effect two rounds in a row.`, out),
+    actions: (lr.actions || []).filter((a) => a.name || a.text).map((a) => ({ ...a, text: fillTemplate(a.text, out) })),
+  } : null;
 
   // ---- CR & XP
   out.xp = xpForCR(crNum);

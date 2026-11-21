@@ -46,6 +46,13 @@ padrão para novas fica em *Biblioteca → Configurações*). No Pathfinder entr
 magias do PF1e (d20pfsrd), energias no lugar dos elementos do FF, magias por dia no lugar de MP e sem
 regras de chefe/Limit Break.
 
+## Legendary e Lair Actions
+
+A seção **Legendary e Lair Actions** do editor liga cada uma separadamente. Ações lendárias têm número de ações
+por rodada e custo de cada ação (1, 2 ou 3, mostrado como "Costs 2 Actions"); ações de covil têm a contagem de
+iniciativa. O texto de introdução é gerado sozinho (editável) e os textos aceitam {dcCon}, {hd} etc. No statblock
+entram a linha *Legendary Actions 3/round* em OFFENSE e as seções LEGENDARY ACTIONS e LAIR ACTIONS.
+
 ## Cálculos automáticos
 
 - **Feats bônus de classe** (Fighter, Monk, Ranger, Gunslinger…) aumentam o limite de feats: feats além do limite normal ocupam as vagas bônus sozinhos. Feats que a classe concede (Improved Unarmed Strike do Monk, Endurance, Scribe Scroll…) entram sozinhos no statblock.
