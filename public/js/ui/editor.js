@@ -706,10 +706,20 @@ function AbilitiesListSection({ def, up, c, homebrew, db }) {
           <${Select} value=${a.kind} onChange=${(v) => set({ kind: v })} options=${KINDS} />
           <${Select} value=${a.placement} onChange=${(v) => set({ placement: v })} options=${PLACEMENTS} />
           <${Check} label="Blue Magic" checked=${a.blue} onChange=${(v) => set({ blue: v })} title="Aprendível por Blue Mage" />
+          <${Check} label="ocultar descrição" checked=${!!def.hideAbilityText?.[a.name]} title="Some do bloco Special Abilities, mas o nome continua na linha de cima (ex.: Special Attacks pounce)"
+            onChange=${(v) => up({ hideAbilityText: { ...(def.hideAbilityText || {}), [a.name]: v } })} />
         </div>
         <input type="text" value=${a.short} placeholder="texto na linha (ex.: breath weapon (30-ft. cone, 6d6 fire, DC {dcCon}))" onInput=${(e) => set({ short: e.target.value })} />
         <textarea rows="2" value=${a.text} placeholder="Descrição completa (Special Abilities)" onInput=${(e) => set({ text: e.target.value })}></textarea>
       </div>`} />
+    ${(() => {
+      const auto = c.specialAbilities.filter((x) => x.text && !x.classFeature && x.origin !== 'custom' && x.placement !== 'hidden');
+      return auto.length ? html`<details class="traits"><summary>Descrições automáticas (subtipos, raça) no bloco Special Abilities: ${auto.filter((x) => !def.hideAbilityText?.[x.name]).length}/${auto.length}</summary>
+        ${auto.map((x) => html`<div class="row"><${Check} label=${`ocultar descrição de ${x.name}`} checked=${!!def.hideAbilityText?.[x.name]}
+          onChange=${(v) => up({ hideAbilityText: { ...(def.hideAbilityText || {}), [x.name]: v } })} /> <small class="muted">${x.origin}</small></div>`)}
+        <div class="muted small">O nome continua na linha de cima do statblock (Special Attacks, Defensive Abilities, SQ…).</div>
+      </details>` : null;
+    })()}
     <div class="muted small">Universal Monster Rules do FFd20 e do Pathfinder (${templates.length}) — o texto já vem no formato do statblock e na linha certa; CDs viram {dcCon}/{dcMental} automaticamente.</div>
     <${SearchPicker} items=${templates} getText=${(t) => t.name} onPick=${addTemplate} limit=${80} placeholder="+ Buscar Universal Monster Rule (grab, pounce, breath weapon, drench…)"
       renderItem=${(t) => html`<span><b>${t.name}</b>${t.kind ? ` (${t.kind})` : ''} <span class="src-badge">${t.group}${t.location ? ` · ${t.location}` : ''}</span>${t.requires ? html` <span class="small warn">${t.requires}</span>` : null}

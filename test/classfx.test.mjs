@@ -123,4 +123,16 @@ t('racial traits: skills, saves, immunities, bonus feat and skill ranks', () => 
   assert.ok(dwarf.ac.notes.some((n) => /giant/.test(n)));
 });
 
+t('"ocultar descrição": Pounce stays in Special Attacks, no paragraph in Special Abilities', () => {
+  const d = { ...newCreature('monster'), name: 'Coeurl' };
+  d.abilitiesList = [{ id: 'p', name: 'Pounce', kind: 'Ex', placement: 'specialAttack', short: 'pounce', text: 'When a creature with this special attack makes a charge, it can make a full attack.' }];
+  let out = md(d, compute(d, db));
+  assert.match(out, /\*\*Special Attacks\*\* pounce/);
+  assert.match(out, /\*\*Pounce \(Ex\)\*\* When a creature/);
+  d.hideAbilityText = { Pounce: true };
+  out = md(d, compute(d, db));
+  assert.match(out, /\*\*Special Attacks\*\* pounce/);
+  assert.doesNotMatch(out, /\*\*Pounce \(Ex\)\*\*/);
+});
+
 console.log(`${passed} class-effect tests passed`);

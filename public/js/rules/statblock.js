@@ -138,7 +138,8 @@ export function buildStatblock(d, c, db) {
   line('Other Gear', [...gs.other, d.gear].filter(Boolean).join(', '));
 
   // ---------------- special abilities
-  const detailed = c.specialAbilities.filter((a) => a.text);
+  // "ocultar descrição": the ability keeps its name in the line above but gets no paragraph in Special Abilities
+  const detailed = c.specialAbilities.filter((a) => a.text && !a.hideText && !d.hideAbilityText?.[a.name]);
   if (detailed.length || c.burst.length || c.limitBreaks.length) {
     section('Special Abilities');
     for (const b of c.burst) B.push({ t: 'ability', name: b.name || 'Burst Mode', kind: b.kind || 'Su', text: `${b.text || ''}${b.text ? ' ' : ''}(Swift action at 50% HP or less; ${b.uses}/day; lasts ${b.duration}.)` });
