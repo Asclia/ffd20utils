@@ -13,6 +13,7 @@ import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGET
 import { exportMarkdown } from '../export.js';
 import { EquipmentSection } from './equipment.js';
 import { TalentsSection } from './talents.js';
+import { useAppearance } from './appearance.js';
 import { autoBuild, detectRole, ROLES, PARTS, mainClass } from '../rules/autobuild.js';
 
 const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
@@ -23,7 +24,8 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
   const { db, homebrew, folders } = app;
   const c = useMemo(() => compute(def, { ...db, homebrew }), [def, db, homebrew]);
   const blocks = useMemo(() => buildStatblock(def, c, db), [def, c, db]);
-  const sbHTML = useMemo(() => statblockHTML(blocks), [blocks]);
+  const look = useAppearance();
+  const sbHTML = useMemo(() => statblockHTML(blocks, { abilityLayout: look.sbAbilityLayout }), [blocks, look.sbAbilityLayout]);
   const up = (patch) => setDef((d) => ({ ...d, ...patch }));
   const upIn = (key, patch) => setDef((d) => ({ ...d, [key]: { ...(d[key] || {}), ...patch } }));
   const npc = mode === 'npc';

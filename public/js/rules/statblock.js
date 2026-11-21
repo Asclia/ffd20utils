@@ -179,7 +179,13 @@ export function statblockHTML(blocks, opts = {}) {
       case 'line': out.push(`<p><b>${esc(b.label)}</b> ${safe(b.text, true)}</p>`); break;
       case 'indent': out.push(`<p class="sb-indent">${safe(b.text, b.html)}</p>`); break;
       case 'section': out.push(`<div class="sb-section">${esc(b.title.toUpperCase())}</div>`); break;
-      case 'ability': out.push(`<p><b>${esc(b.name)}${b.kind ? ` (${esc(b.kind)})` : ''}</b> ${esc(b.text).replace(/\n/g, '<br>')}</p>`); break;
+      // Special Abilities: name on its own line with the text below (default) or on the same line ("inline")
+      case 'ability': {
+        const head = `<b>${esc(b.name)}${b.kind ? ` (${esc(b.kind)})` : ''}</b>`;
+        const body = esc(b.text).replace(/\n/g, '<br>');
+        out.push(opts.abilityLayout === 'inline' ? `<p class="sb-ability">${head} ${body}</p>` : `<div class="sb-ability"><p class="sb-ability-name">${head}</p>${body ? `<p>${body}</p>` : ''}</div>`);
+        break;
+      }
       case 'text': out.push(`<p class="sb-desc">${esc(b.text).replace(/\n/g, '<br>')}</p>`); break;
       default: break;
     }
@@ -214,7 +220,13 @@ export function statblockMarkdown(blocks, d, c, opts = {}) {
       case 'line': lines.push(`**${b.label}** ${mdInline(b.text)}  `); break;
       case 'indent': lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${mdInline(b.text)}  `); break;
       case 'section': lines.push('', `### ${b.title.toUpperCase()}`, '---'); break;
-      case 'ability': lines.push(`**${b.name}${b.kind ? ` (${b.kind})` : ''}** ${b.text.replace(/\n/g, '  \n')}`, ''); break;
+      case 'ability': {
+        const head = `**${b.name}${b.kind ? ` (${b.kind})` : ''}**`;
+        const body = b.text.replace(/\n/g, '  \n');
+        if (opts.abilityLayout === 'inline') lines.push(`${head} ${body}`, '');
+        else lines.push(`${head}  `, ...(body ? [body] : []), '');
+        break;
+      }
       case 'text': lines.push(b.text, ''); break;
       default: break;
     }

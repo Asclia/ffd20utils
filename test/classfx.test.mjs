@@ -128,7 +128,8 @@ t('"ocultar descrição": Pounce stays in Special Attacks, no paragraph in Speci
   d.abilitiesList = [{ id: 'p', name: 'Pounce', kind: 'Ex', placement: 'specialAttack', short: 'pounce', text: 'When a creature with this special attack makes a charge, it can make a full attack.' }];
   let out = md(d, compute(d, db));
   assert.match(out, /\*\*Special Attacks\*\* pounce/);
-  assert.match(out, /\*\*Pounce \(Ex\)\*\* When a creature/);
+  assert.match(out, /\*\*Pounce \(Ex\)\*\*  \nWhen a creature/); // name on its own line, text below (default)
+  assert.match(statblockMarkdown(buildStatblock(d, compute(d, db), db), d, compute(d, db), { abilityLayout: 'inline' }), /\*\*Pounce \(Ex\)\*\* When a creature/);
   d.hideAbilityText = { Pounce: true };
   out = md(d, compute(d, db));
   assert.match(out, /\*\*Special Attacks\*\* pounce/);

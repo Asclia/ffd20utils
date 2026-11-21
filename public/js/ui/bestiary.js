@@ -5,6 +5,7 @@ import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import { crLabel } from '../rules/tables.js';
 import { exportMarkdown, exportToVault } from '../export.js';
 import { folderPath } from './editor.js';
+import { loadAppearance } from './appearance.js';
 
 const TYPE_ICON = {
   aberration: '👁', animal: '🐾', construct: '⚙', dragon: '🐉', fey: '🧚', humanoid: '🧍', 'magical-beast': '🦁',
@@ -84,7 +85,7 @@ function Card({ e, c, onClick }) {
 
 export function Viewer({ app, entry, c, onClose, onOpen }) {
   const comp = c || compute(entry, { ...app.db, homebrew: app.homebrew });
-  const sb = statblockHTML(buildStatblock(entry, comp, app.db));
+  const sb = statblockHTML(buildStatblock(entry, comp, app.db), { abilityLayout: loadAppearance().sbAbilityLayout });
   const del = async () => {
     if (!confirm(`Excluir "${entry.name}" da biblioteca? Isso não pode ser desfeito.`)) return;
     await app.deleteEntry(entry.id);

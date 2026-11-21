@@ -1,6 +1,6 @@
 // Appearance: themes and visual preferences. Stored per computer (localStorage), applied to <html>
 // as data-* attributes / CSS variables. public/js/boot.js applies them before the app loads (no flash).
-import { html, useState } from '../../vendor/ui.mjs';
+import { html, useState, useEffect } from '../../vendor/ui.mjs';
 import { Modal } from './components.js';
 
 export const THEMES = [
@@ -15,7 +15,7 @@ export const THEMES = [
 export const DEFAULT_APPEARANCE = {
   theme: 'auto', // auto = Arcano (escuro) ou Pergaminho (claro), conforme o sistema
   accent: '', headFont: 'cinzel', bodyFont: 'alegreya', sbFont: 'serif', sbPaper: 'parchment',
-  scale: 100, density: 'comfortable', ornaments: true, texture: true, cardSize: 180,
+  scale: 100, density: 'comfortable', ornaments: true, texture: true, cardSize: 180, sbAbilityLayout: 'block',
 };
 
 export function loadAppearance() {
@@ -46,6 +46,13 @@ export function applyAppearance(a) {
 export function saveAppearance(a) {
   try { localStorage.setItem('appearance', JSON.stringify(a)); } catch { /* ignore */ }
   applyAppearance(a);
+  window.dispatchEvent(new Event('compendium-appearance'));
+}
+// re-render a component when the appearance changes (e.g. the Special Abilities layout)
+export function useAppearance() {
+  const [a, setA] = useState(loadAppearance);
+  useEffect(() => { const f = () => setA(loadAppearance()); window.addEventListener('compendium-appearance', f); return () => window.removeEventListener('compendium-appearance', f); }, []);
+  return a;
 }
 
 const themeAccent = (t) => (THEMES.find((x) => x.id === resolveTheme(t)) || THEMES[0]).colors[2];
@@ -91,6 +98,8 @@ export function AppearanceDialog({ onClose }) {
         <div class="row"><label class="check"><input type="checkbox" checked=${a.texture} onChange=${(e) => up({ texture: e.currentTarget.checked })} /> Grão de papel sutil</label></div>
         <label>Papel do statblock</label>
         <${Seg} value=${a.sbPaper} onChange=${(v) => up({ sbPaper: v })} options=${[['parchment', 'Pergaminho'], ['white', 'Branco'], ['dark', 'Escuro']]} />
+        <label>Special Abilities</label>
+        <${Seg} value=${a.sbAbilityLayout} onChange=${(v) => up({ sbAbilityLayout: v })} options=${[['block', 'Nome acima, texto embaixo'], ['inline', 'Na mesma linha']]} />
         <label>Fonte do statblock</label>
         <${Seg} value=${a.sbFont} onChange=${(v) => up({ sbFont: v })} options=${[['serif', 'Serifada'], ['sans', 'Sem serifa']]} />
       </div>

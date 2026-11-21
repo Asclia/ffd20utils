@@ -3,12 +3,13 @@ import { compute } from './rules/engine.js';
 import { buildStatblock, statblockMarkdown } from './rules/statblock.js';
 import { download, makeZip, fetchBytes, extFromUrl, dataUrlBytes, fileSafe } from './util.js';
 import { toast } from './ui/components.js';
+import { loadAppearance } from './ui/appearance.js';
 
 const isLocal = (src) => src && (src.startsWith('/userdata/') || src.startsWith('data:'));
 
 export function markdownFor(app, def, c, opts = {}) {
   const comp = c || compute(def, { ...app.db, homebrew: app.homebrew });
-  return statblockMarkdown(buildStatblock(def, comp, app.db), def, comp, opts);
+  return statblockMarkdown(buildStatblock(def, comp, app.db), def, comp, { abilityLayout: loadAppearance().sbAbilityLayout, ...opts });
 }
 
 // Download a single .md (or .zip with the image if it is a local file)
