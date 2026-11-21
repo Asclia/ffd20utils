@@ -482,3 +482,23 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 .statblock .sb-ability { margin: 0 0 .7em; }
 .statblock .sb-ability p { margin: 0; }
 .statblock .sb-ability-name { margin-bottom: .1em !important; }
+
+/* ---------- battle (statblocks side by side) */
+.battle-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.battle-add { width: min(420px, 100%); position: relative; }
+.battle-add .picker-list { position: absolute; z-index: 15; left: 0; right: 0; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.battle-info { margin: 0 0 10px; }
+.battle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; align-items: start; }
+.battle-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; box-shadow: var(--shadow-soft, 0 2px 10px rgba(0,0,0,.12)); }
+.battle-card > header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--panel2), transparent); border-radius: var(--radius) var(--radius) 0 0; position: sticky; top: 58px; z-index: 2; }
+.battle-card.collapsed > header { border-bottom: none; }
+.bc-name { font-family: var(--display); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bc-hp { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--muted); }
+.bc-hp input.num { width: 58px; padding: 2px 4px; text-align: center; }
+.bc-hp.bloodied input { border-color: var(--warn); color: var(--warn); }
+.bc-hp.down input { border-color: var(--danger); color: var(--danger); }
+.bc-note { margin: 8px 8px 0; }
+.bc-body { margin: 8px; max-height: calc(100vh - 210px); overflow: auto; padding: 12px 14px; }
+.bc-body .statblock { font-size: 13.5px; }
+.battle-card button.icon:disabled { opacity: .3; cursor: default; }
+@media print { .battle-bar, .battle-info, .bc-note, .battle-card > header button { display: none !important; } .bc-body { max-height: none; overflow: visible; } }

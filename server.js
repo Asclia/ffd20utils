@@ -41,7 +41,7 @@ function watchLibrary() {
   // Each folder only reacts to the files that matter (on Windows a folder also reports changes of
   // its subfolders, e.g. "entries", which must not count as an external change).
   const relevant = new Map([
-    [DATA, (n) => n === 'folders.json' || n === 'homebrew.json'],
+    [DATA, (n) => n === 'folders.json' || n === 'homebrew.json' || n === 'encounters.json'],
     [ENTRIES, (n) => n.endsWith('.json')],
     [DUNGEONS, (n) => n.endsWith('.json')],
     [IMAGES, (n) => /\.(png|jpg|jpeg|gif|webp|avif|svg)$/i.test(n)],
@@ -140,6 +140,8 @@ async function mergeLibrary(from, to) {
   const byId = (list) => new Map((Array.isArray(list) ? list : []).filter((x) => x && x.id).map((x) => [x.id, x]));
   const folders = [...new Map([...byId(await readJSON(path.join(from, 'folders.json'), [])), ...byId(await readJSON(path.join(to, 'folders.json'), []))]).values()];
   if (folders.length) await writeJSON(path.join(to, 'folders.json'), folders);
+  const encounters = [...new Map([...byId(await readJSON(path.join(from, 'encounters.json'), [])), ...byId(await readJSON(path.join(to, 'encounters.json'), []))]).values()];
+  if (encounters.length) await writeJSON(path.join(to, 'encounters.json'), encounters);
   const hbFrom = await readJSON(path.join(from, 'homebrew.json'), {});
   const hbTo = await readJSON(path.join(to, 'homebrew.json'), {});
   const hb = { ...hbFrom, ...hbTo };
@@ -247,11 +249,11 @@ async function api(req, res, url) {
     }
   }
   // simple JSON documents: folders, homebrew, settings
-  m = p.match(/^\/api\/(folders|homebrew|settings)$/);
+  m = p.match(/^\/api\/(folders|homebrew|settings|encounters)$/);
   if (m) {
     // settings belong to this computer (vault path etc.), the rest to the (possibly shared) library
     const file = path.join(m[1] === 'settings' ? LOCAL : DATA, `${m[1]}.json`);
-    const fallback = m[1] === 'folders' ? [] : {};
+    const fallback = m[1] === 'folders' || m[1] === 'encounters' ? [] : {};
     if (method === 'GET') return send(res, 200, await readJSON(file, fallback));
     if (method === 'PUT') { await writeJSON(file, await json(req)); return send(res, 200, { ok: true }); }
   }

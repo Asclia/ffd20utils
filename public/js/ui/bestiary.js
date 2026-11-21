@@ -98,6 +98,7 @@ export function Viewer({ app, entry, c, onClose, onOpen }) {
   return html`<${Modal} title=${entry.name} onClose=${onClose} wide actions=${html`
     <button class="btn primary" onClick=${() => { onOpen(entry); onClose(); }}>Editar</button>
     <button class="btn" onClick=${() => { onOpen({ ...entry, id: undefined, name: `${entry.name} (cópia)` }); onClose(); }}>Duplicar</button>
+    <button class="btn" onClick=${() => { app.openInBattle([entry]); onClose(); }} title="Abre este statblock na aba Batalha, junto dos outros">⚔ Batalha</button>
     <button class="btn" onClick=${() => exportMarkdown(app, entry, comp)}>Exportar .md</button>
     ${app.store.kind === 'server' && app.settings.exportDir ? html`<button class="btn" onClick=${() => exportToVault(app, [entry], (id) => (app.settings.keepFolders ? folderPath(app.folders, id) : ''))}>Enviar ao vault</button>` : null}
     <${Select} value=${entry.folderId || ''} onChange=${move} options=${[['', 'Mover: (sem pasta)'], ...app.folders.map((f) => [f.id, `Mover: ${folderPath(app.folders, f.id)}`])]} />

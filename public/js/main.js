@@ -6,6 +6,7 @@ import { Bestiary } from './ui/bestiary.js';
 import { Library } from './ui/library.js';
 import { Homebrew } from './ui/homebrew.js';
 import { Dungeons } from './ui/dungeons.js';
+import { Battle, addToBattle } from './ui/battle.js';
 import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
 import { AppearanceDialog } from './ui/appearance.js';
 import { debounce, deepClone } from './util.js';
@@ -16,6 +17,7 @@ const TABS = [
   ['monster', 'Monstros', '🐉'],
   ['npc', 'NPCs', '🧙'],
   ['dungeons', 'Masmorras', '🏰'],
+  ['battle', 'Batalha', '⚔️'],
   ['library', 'Biblioteca', '📚'],
   ['homebrew', 'Homebrew', '⚗️'],
 ];
@@ -127,6 +129,7 @@ function App() {
 
   const app = useMemo(() => ({
     db, store, entries, folders, homebrew, settings,
+    openInBattle(list) { addToBattle(list); setTab('battle'); toast(`${list.length} statblock(s) abertos na Batalha.`); },
     async saveEntry(e, quiet) {
       const entry = { ...e, updatedAt: Date.now() };
       await store.saveEntry(entry);
@@ -186,6 +189,7 @@ function App() {
       ${tab === 'monster' ? html`<${Editor} key=${work.monster.def.id} app=${app} mode="monster" def=${work.monster.def} setDef=${setDef('monster')} dirty=${isDirty('monster')} inLibrary=${inLibrary('monster')} onSave=${() => save('monster')} onSaveCopy=${() => save('monster', true)} onNew=${() => newEntry('monster')} />` : null}
       ${tab === 'npc' ? html`<${Editor} key=${work.npc.def.id} app=${app} mode="npc" def=${work.npc.def} setDef=${setDef('npc')} dirty=${isDirty('npc')} inLibrary=${inLibrary('npc')} onSave=${() => save('npc')} onSaveCopy=${() => save('npc', true)} onNew=${() => newEntry('npc')} />` : null}
       ${tab === 'dungeons' ? html`<${Dungeons} app=${app} onOpenEntry=${openEntry} />` : null}
+      ${tab === 'battle' ? html`<${Battle} app=${app} onOpen=${openEntry} />` : null}
       ${tab === 'library' ? html`<${Library} app=${app} onOpen=${openEntry} />` : null}
       ${tab === 'homebrew' ? html`<${Homebrew} app=${app} />` : null}
     </${ErrorBoundary}></main>

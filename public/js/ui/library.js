@@ -121,6 +121,7 @@ export function Library({ app, onOpen }) {
             <option value="">Mover para…</option><option value="__none">(sem pasta)</option>
             ${folders.map((f) => html`<option value=${f.id}>${fp(f.id)}</option>`)}
           </select>
+          <button class="btn small primary" onClick=${() => app.openInBattle(selected())}>⚔ Abrir na batalha</button>
           <button class="btn small" onClick=${() => exportManyZip(app, selected(), fp)}>Exportar .md (ZIP)</button>
           ${app.store.kind === 'server' && app.settings.exportDir ? html`<button class="btn small" onClick=${() => exportToVault(app, selected(), (id) => (app.settings.keepFolders ? fp(id) : ''))}>Enviar ao vault</button>` : null}
           <button class="btn small" onClick=${() => exportJSON(selected(), folders, app.homebrew)}>Exportar JSON</button>
