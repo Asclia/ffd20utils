@@ -11,6 +11,7 @@ import { Toasts, toast, ErrorBoundary, AskHost } from './ui/components.js';
 import { AppearanceDialog } from './ui/appearance.js';
 import { debounce, deepClone } from './util.js';
 import { SUBTYPE_BY_ID } from './rules/types.js';
+import { canonicalFeatName } from './rules/featEffects.js';
 
 const TABS = [
   ['bestiary', 'Bestiário', '📖'],
@@ -32,10 +33,11 @@ const Emblem = () => html`<svg viewBox="0 0 64 64" aria-hidden="true">
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [ffClasses, feats, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes] = await Promise.all(
+  const [ffClasses, featsRaw, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes] = await Promise.all(
     ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json',
       'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json'].map(get));
   const archetypes = [...ffArchetypes, ...pfArchetypes];
+  const feats = featsRaw.map((f) => ({ ...f, name: canonicalFeatName(f.name) })); // "Weapon Focus, Greater" → "Greater Weapon Focus"
   // Pathfinder subtypes not already defined with rules in types.js
   const pfSubtypes = pfSubtypesRaw.filter((x) => !SUBTYPE_BY_ID[x.id]).map((x) => ({ id: x.id, name: x.name, traits: x.text, pf: true }));
   // Both systems share one database; Pathfinder class ids get a "pf-" prefix (bard, cleric… exist in both)

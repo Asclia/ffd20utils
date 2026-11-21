@@ -76,6 +76,13 @@ export const FEAT_EFFECTS = {
   },
   'deft maneuvers': { note: '+2 em trip, disarm, dirty trick, reposition e steal; finta como ação de movimento.', mods: () => [{ target: 'cmb', value: 2, cond: 'to trip, disarm, dirty trick, reposition or steal', source: 'Deft Maneuvers' }] },
   'powerful maneuvers': { note: '+2 em bull rush, drag, overrun e sunder.', mods: () => [{ target: 'cmb', value: 2, cond: 'to bull rush, drag, overrun or sunder', source: 'Powerful Maneuvers' }] },
+  endurance: { note: '+4 em testes contra fadiga, calor/frio, sufocamento, fome e sede.', mods: () => [{ target: 'fort', value: 4, cond: 'vs. hot/cold environments, suffocation, starvation and thirst', source: 'Endurance' }] },
+  'critical focus': { note: '+4 para confirmar críticos.', mods: () => [{ target: 'attack', value: 4, cond: 'to confirm critical hits', source: 'Critical Focus' }] },
+  'two-weapon defense': { note: '+1 de escudo na CA ao lutar com duas armas.', mods: (ctx) => (ctx.twoWeapons ? [{ target: 'ac', value: 1, type: 'shield-twd', source: 'Two-Weapon Defense' }] : []) },
+  'improved iron will': { note: 'Uma vez por dia, rola de novo um save de Vontade.' },
+  'improved great fortitude': { note: 'Uma vez por dia, rola de novo um save de Fortitude.' },
+  'improved lightning reflexes': { note: 'Uma vez por dia, rola de novo um save de Reflexos.' },
+  'combat reflexes': { note: 'Ataques de oportunidade extras = mod. de Des.' },
   manyshot: {
     toggle: 'Usar Manyshot',
     note: 'No ataque total com arco, o primeiro ataque dispara duas flechas (dano das duas se acertar; precisão e crítico só uma vez).',
@@ -160,7 +167,15 @@ export const FEAT_EFFECTS = {
 };
 
 export function featKey(name) {
-  return String(name || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, ' ').replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
+  const k = String(name || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, ' ').replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
+  // Pathfinder feat index writes "Weapon Focus, Greater" / "Critical, Improved" → "greater weapon focus"
+  const inv = /^([^,]+),\s*([a-z-]+)$/.exec(k); // "cleave, great", "critical, bleeding", "armor proficiency, heavy"
+  return inv ? `${inv[2]} ${inv[1]}` : k;
+}
+// Display name in the usual statblock form: "Weapon Focus, Greater" → "Greater Weapon Focus"
+export function canonicalFeatName(name) {
+  const m = /^([^,(]+),\s*([A-Z][a-z-]+)(\s*\(.*\))?$/.exec(String(name || ''));
+  return m ? `${m[2]} ${m[1]}${m[3] || ''}` : name;
 }
 export function featEffect(name) {
   return FEAT_EFFECTS[featKey(name)] || null;

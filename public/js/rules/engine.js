@@ -243,7 +243,7 @@ export function compute(def, db) {
   // ---- feats: collect modifiers & attack hooks
   const featFlags = {};
   const featAttackHooks = [];
-  const ctx = { bab, hd, cl, abil, m, skillRanks, size, isBoss: isBossTier };
+  const ctx = { bab, hd, cl, abil, m, skillRanks, size, isBoss: isBossTier, twoWeapons: (d.attacks || []).some((a) => !a.natural && a.hands === 'off') };
   const seen = {};
   out.feats = [];
   const itemFeats = wornItems.flatMap((it) => (it.feats || []).map((name) => ({ id: `item:${it.id}:${name}`, name, fromItem: it.name })));

@@ -215,4 +215,17 @@ t('Moogle in the Room house rules', () => {
   assert.ok(monk.feats.some((f) => f.name === 'Unarmed Combatant') && !monk.feats.some((f) => f.name === 'Improved Unarmed Strike'));
 });
 
+t('inverted feat names from the PF index ("Weapon Focus, Greater") are automated', () => {
+  const d = { ...newCreature('monster'), name: 'X' };
+  d.attacks = [{ ...newAttack('melee', false), name: 'longsword', dice: '1d8', critRange: 19 }];
+  const base = compute(d, db).attackDetails[0].att;
+  d.feats = [{ id: 'a', name: 'Weapon Focus', param: 'longsword' }, { id: 'b', name: 'Weapon Focus, Greater', param: 'longsword' }, { id: 'c', name: 'Critical, Improved', param: 'longsword' }];
+  const c = compute(d, db);
+  assert.equal(c.attackDetails[0].att, base + 2);
+  assert.match(c.attacks.melee[0], /17–20/);
+  const out = md(d, c);
+  assert.match(out, /Greater Weapon Focus \(longsword\)/);
+  assert.match(out, /Improved Critical \(longsword\)/);
+});
+
 console.log(`${passed} class-effect tests passed`);
