@@ -121,7 +121,7 @@ Se o aplicativo de sincronização trouxer alterações com o programa aberto, a
 
 As imagens vão para a **Pasta de imagens no vault** (*Biblioteca → Configurações*), relativa à raiz do vault
 (a pasta que tem `.obsidian`), por exemplo `Resources/z_images/Bestiary`, ou um caminho completo. Cada imagem
-recebe o nome da criatura e entra no `.md` como `![[Cerberus.png]]`. Nos ZIPs, a imagem vai no mesmo caminho:
+recebe o nome da criatura e entra no `.md` como `![[Cerberus.png|hs-med+ws-med+right]]` (as opções depois do `|` ficam em *Configurações → Opções da imagem no Obsidian*). Nos ZIPs, a imagem vai no mesmo caminho:
 extraia o ZIP na raiz do vault.
 
 ## Dados das regras

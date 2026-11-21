@@ -212,7 +212,9 @@ export function statblockMarkdown(blocks, d, c, opts = {}) {
       case 'title': lines.push(`# ${b.name}`, '', `**CR ${b.cr}**${b.mr ? ` / ${b.mr}` : ''}`, ''); break;
       case 'image': {
         const src = opts.imagePath || b.src;
-        if (src) lines.push(opts.wikiImage && opts.imagePath ? `![[${opts.imagePath}]]` : `![${(b.alt || '').replace(/[[\]]/g, '')}](${src.replace(/ /g, '%20')})`, '');
+        // Obsidian display options after "|" (size and position), e.g. hs-med+ws-med+right
+        const look = opts.imageOptions === undefined ? 'hs-med+ws-med+right' : String(opts.imageOptions || '').trim();
+        if (src) lines.push(opts.wikiImage && opts.imagePath ? `![[${opts.imagePath}${look ? `|${look}` : ''}]]` : `![${look || (b.alt || '').replace(/[[\]|]/g, '')}](${src.replace(/ /g, '%20')})`, '');
         break;
       }
       case 'flavor': lines.push(`*${b.text}*`, ''); break;

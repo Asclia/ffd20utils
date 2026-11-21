@@ -11,7 +11,7 @@ const zipImageDir = (app) => { const f = String(app.settings?.attachmentsFolder 
 
 export function markdownFor(app, def, c, opts = {}) {
   const comp = c || compute(def, { ...app.db, homebrew: app.homebrew });
-  return statblockMarkdown(buildStatblock(def, comp, app.db), def, comp, { abilityLayout: loadAppearance().sbAbilityLayout, ...opts });
+  return statblockMarkdown(buildStatblock(def, comp, app.db), def, comp, { abilityLayout: loadAppearance().sbAbilityLayout, imageOptions: app.settings?.imageOptions ?? 'hs-med+ws-med+right', ...opts });
 }
 
 // Download a single .md (or .zip with the image if it is a local file)

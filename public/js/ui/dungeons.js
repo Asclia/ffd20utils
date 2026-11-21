@@ -303,7 +303,7 @@ function RoomPanel({ room, setRoom, reroll, onDelete, onOpen }) {
 
 export function dungeonMarkdown(d, imagePath, wiki = false) {
   const lines = ['---', `name: ${JSON.stringify(d.name || 'Masmorra')}`, `system: ${JSON.stringify(SYSTEMS[d.system] || d.system)}`, `party_level: ${d.partyLevel}`, 'tags: ["compendium", "dungeon"]', '---', '', `# ${d.name || 'Masmorra'}`, ''];
-  if (imagePath) lines.push(wiki ? `![[${imagePath}]]` : `![Mapa](${imagePath.replace(/ /g, '%20')})`, '');
+  if (imagePath) lines.push(wiki ? `![[${imagePath}]]` : `![Mapa](${imagePath.replace(/ /g, '%20')})`, ''); // the map stays full width
   lines.push('## Visão geral', '');
   for (const [k, label] of OVERVIEW_FIELDS) if (d.overview?.[k]) lines.push(`- **${label}:** ${d.overview[k]}`);
   if (d.notes) lines.push('', d.notes);
