@@ -180,3 +180,51 @@ export function canonicalFeatName(name) {
 export function featEffect(name) {
   return FEAT_EFFECTS[featKey(name)] || null;
 }
+
+// ------------------------------------------------------------------ effects read from the benefit text
+// For feats without a hand-written entry: "+2 bonus on Diplomacy checks", "+1 dodge bonus to AC", "+2 bonus on
+// saving throws against sleep…" become modifiers; anything after "when/against/while/to…" becomes a condition
+// (shown as a note, like official stat blocks do).
+import { SKILLS as SKILL_LIST } from './skills.js';
+const SKILL_NAMES = SKILL_LIST.map((s) => s.name);
+const COND_RE = /^\s*(when|against|vs\.?|while|to |made|with|for |if |during|in |on |as long|until|that|whenever|after|before|from|instead)/i;
+function targetsOf(raw) {
+  const t = raw.toLowerCase();
+  if (/^(all )?saving throws|^saves/.test(t)) return ['saves'];
+  if (/^fortitude/.test(t)) return ['fort'];
+  if (/^reflex/.test(t)) return ['ref'];
+  if (/^will/.test(t)) return ['will'];
+  if (/^initiative/.test(t)) return ['init'];
+  if (/^(ac|armor class)\b/.test(t)) return ['ac'];
+  if (/^(cmd|combat maneuver defense)/.test(t)) return ['cmd'];
+  if (/^(cmb|combat maneuver checks?)/.test(t)) return ['cmb'];
+  if (/^concentration/.test(t)) return ['concentration'];
+  if (/^attack rolls/.test(t)) return ['attack'];
+  if (/^damage rolls/.test(t)) return ['damage'];
+  if (/^(maximum )?hit points/.test(t)) return ['hp'];
+  // skills: "Diplomacy and Intimidate checks", "all Knowledge and Profession checks"
+  const out = [];
+  for (const part of raw.split(/,|\band\b|\bor\b/)) {
+    const p = part.replace(/\b(all|skill|checks?)\b/gi, '').trim().toLowerCase();
+    if (!p) continue;
+    if (p === 'knowledge') { out.push(...SKILL_NAMES.filter((n) => n.startsWith('Knowledge')).map((n) => `skill:${n}`)); continue; }
+    const hit = SKILL_NAMES.find((n) => n.toLowerCase() === p);
+    if (hit) out.push(`skill:${hit}`);
+  }
+  return out;
+}
+export function effectFromText(name, text) {
+  const t = String(text || '').replace(/\s+/g, ' ');
+  const mods = [];
+  const re = /\+(\d+) (?:(dodge|insight|competence|morale|sacred|profane|luck|deflection|circumstance|racial|untyped|trait|enhancement) )?bonus (?:on|to) ((?:all )?(?:saving throws|saves|Fortitude saves|Reflex saves|Will saves|Fortitude|Reflex|Will|initiative(?: checks)?|AC|Armor Class|CMD|CMB|combat maneuver checks|concentration checks|attack rolls|damage rolls|(?:maximum )?hit points|(?:all )?[A-Z][A-Za-z ()]+? (?:skill )?checks))([^.;]*)/g;
+  for (const m of t.matchAll(re)) {
+    const targets = targetsOf(m[3]);
+    if (!targets.length) continue;
+    const rest = m[4] || '';
+    const cond = COND_RE.test(rest) ? rest.trim().replace(/^made /i, '') : '';
+    const type = m[2] === 'dodge' || m[2] === 'circumstance' ? m[2] : (m[2] || 'untyped');
+    for (const target of targets) mods.push({ target, value: Number(m[1]), type: target === 'ac' && type === 'untyped' ? 'untyped' : type, cond, source: name });
+  }
+  if (!mods.length) return null;
+  return { mods: () => mods, note: `Lido do texto: ${mods.map((x) => `+${x.value} ${x.target.replace('skill:', '')}${x.cond ? ` (${x.cond})` : ''}`).join(', ')}.`, fromText: true };
+}

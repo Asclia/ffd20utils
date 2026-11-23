@@ -31,6 +31,18 @@ async function start() {
       icon: path.join(__dirname, 'icon.png'),
       webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
     });
+    // confirm/alert from the page: shown as native message boxes, then the page gets the focus back
+    const refocus = () => setTimeout(() => { if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); } }, 0);
+    ipcMain.on('dialog-confirm', (e, message) => {
+      const r = dialog.showMessageBoxSync(win, { type: 'question', buttons: ['OK', 'Cancelar'], defaultId: 0, cancelId: 1, title: 'Compendium', message });
+      e.returnValue = r === 0;
+      refocus();
+    });
+    ipcMain.on('dialog-alert', (e, message) => {
+      dialog.showMessageBoxSync(win, { type: 'info', buttons: ['OK'], title: 'Compendium', message });
+      e.returnValue = true;
+      refocus();
+    });
     // native folder picker for the library folder / Obsidian vault
     ipcMain.handle('pick-folder', async (e, title) => {
       const r = await dialog.showOpenDialog(win, { title: title || 'Escolher pasta', properties: ['openDirectory', 'createDirectory'] });

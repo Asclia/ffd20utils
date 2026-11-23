@@ -214,10 +214,12 @@ const BARD_KNOWN = [[4, 2], [5, 3], [6, 4], [6, 4, 2], [6, 4, 3], [6, 4, 4], [6,
 const USEFUL = /damage|deals?|cure|heal|restor|protect|bonus|haste|slow|paraly|stun|sleep|confus|blind|silence|summon|dispel|fear|charm|hold|barrier|shield|resist|invisib|fly|teleport|raise|revive|poison|drain|weaken|entangle|bless/i;
 const SPELL_LIST_OF = { scholar: ['black-mage', 'white-mage'], 'lil-witch': ['black-mage', 'white-mage'], cleric: ['cleric', 'white-mage'] };
 
-function choose(pool, n, r, prefer) {
+function choose(pool0, n, r, prefer) {
+  const seen = new Set();
+  const pool = pool0.filter((s) => !seen.has(s.name) && seen.add(s.name));
   // core books first (Core Rulebook, APG, Ultimate Magic/Combat), then spells that do something in a fight
-  const BOOK = { PZO1110: 4, PZO1115: 2.5, PZO1117: 2, PZO1118: 1.5 };
-  const scored = pool.map((s) => ({ s, w: (BOOK[s.book] || 1) * (USEFUL.test(s.summary || '') ? 3 : 1) * (prefer && prefer.test(`${s.summary} ${s.school}`) ? 2 : 1) * (0.5 + r()) }));
+  const bookW = (b) => (/PZO1110|Core Rulebook/i.test(b || '') ? 4 : /PZO1115|Advanced Player/i.test(b || '') ? 2.5 : /PZO1117|Ultimate Magic/i.test(b || '') ? 2 : /PZO1118|Ultimate Combat/i.test(b || '') ? 1.5 : 1);
+  const scored = pool.map((s) => ({ s, w: bookW(s.book) * (USEFUL.test(s.summary || '') ? 3 : 1) * (prefer && prefer.test(`${s.summary} ${s.school}`) ? 2 : 1) * (0.5 + r()) }));
   scored.sort((a, b) => b.w - a.w);
   return scored.slice(0, n).map((x) => x.s);
 }
@@ -401,7 +403,11 @@ export function autoBuild(def, db, { role, parts = PARTS.map((p) => p[0]), seed 
   if (want.has('abilities')) { d = { ...d, ...buildAbilities(d, c, R) }; c = calc(); }
   let ctx = {};
   if (want.has('equipment')) { d = { ...d, ...buildEquipment(d, c, db, R) }; c = calc(); }
-  if (want.has('spells')) { d = { ...d, ...buildSpells(d, c, db, seed) }; c = calc(); }
+  if (want.has('spells')) {
+    // no caster class left (e.g. the class was changed): old spells go away
+    d = c.classes.some((x) => x.def.caster) ? { ...d, ...buildSpells(d, c, db, seed) } : { ...d, caster: { ...d.caster, spells: [] } };
+    c = calc();
+  }
   if (want.has('skills')) { d = { ...d, ...buildSkills(d, c, R) }; c = calc(); }
   if (want.has('feats')) {
     const featNames = new Map((db.feats || []).map((f) => [featKey(f.name), f]));

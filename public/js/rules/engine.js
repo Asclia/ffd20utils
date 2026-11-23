@@ -6,7 +6,7 @@ import {
 } from './tables.js';
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK, PF_ENERGIES, FF_TO_PF, PF_TYPE_OVERRIDES, PF_SUBTYPE_OVERRIDES } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
-import { featEffect, featKey } from './featEffects.js';
+import { featEffect, featKey, effectFromText } from './featEffects.js';
 import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS, WEAPON_MATERIALS, ARMOR_MATERIALS, specialsFor } from './equipment.js';
 import { raceTraitEffects } from './raceEffects.js';
 import { activeHouseRules, goneFeat, COMBAT_OPTIONS } from './houseRules.js';
@@ -220,7 +220,7 @@ export function compute(def, db) {
     const archs = (c.archetypes || []).map((id) => (db.archetypesById || {})[id]).filter(Boolean);
     const replaced = [];
     for (const a of archs) for (const f of a.features || []) if (f.level <= lvl) for (const r of f.replaces || []) replaced.push(normFeat(r));
-    const isReplaced = (name) => { const n = normFeat(name); return replaced.some((k) => k && (n === k || (n.length > 3 && (k.startsWith(n) || n.startsWith(k))))); };
+    const isReplaced = (name) => replaced.some((k) => replacesFeature(k, name));
     for (const f of c.def.features || []) if (f.level <= lvl && !(archs.length && isReplaced(f.name))) activeFeatures.push({ cls: c.def, f, L: lvl, value: latest[normFeat(f.name)] || findLatest(latest, f.name) });
     for (const a of archs) for (const f of a.features || []) if (f.level <= lvl) activeFeatures.push({ cls: c.def, f: { ...f, archetype: a.name }, L: lvl, value: '' });
     // domains, bloodlines, schools, mysteries…: powers by level
@@ -260,6 +260,9 @@ export function compute(def, db) {
   // ---- feats: collect modifiers & attack hooks
   const featFlags = {};
   const featAttackHooks = [];
+  const textEffects = {};
+  let featIdx = null;
+  const featIndex = () => featIdx || (featIdx = featIndexFor(db.feats, pf));
   const ctx = { bab, hd, cl, abil, m, skillRanks, size, isBoss: isBossTier, twoWeapons: (d.attacks || []).some((a) => !a.natural && a.hands === 'off') };
   const seen = {};
   out.feats = [];
@@ -271,7 +274,12 @@ export function compute(def, db) {
   out.houseToggles = houseFeats.filter((f) => featEffect(f.name)?.toggle).map((f) => ({ key: f.id, label: `${f.name} (opção)`, on: !!(d.toggles || {})[f.id] }));
   for (const f of [...(d.feats || []), ...itemFeats, ...autoFeats, ...houseFeats]) {
     const key = featKey(f.name);
-    const eff = featEffect(f.name) || (hb.feats || []).find((h) => featKey(h.name) === key);
+    // hand-written automation first; otherwise read "+N bonus on X" from the feat's benefit text
+    let eff = featEffect(f.name) || (hb.feats || []).find((h) => featKey(h.name) === key);
+    if (!eff && !f.virtual) {
+      textEffects[key] = textEffects[key] === undefined ? (() => { const info = featIndex()[key]; return info ? effectFromText(f.name, info.benefit && info.benefit.length > 25 ? info.benefit : info.text || info.benefit) : null; })() : textEffects[key];
+      eff = textEffects[key];
+    }
     const toggleOn = !!(d.toggles || {})[f.id || key];
     if (!f.fromItem && !f.virtual) out.feats.push({ ...f, automated: !!(eff && (eff.mods || eff.attack || eff.flag)) });
     if (!eff) continue;
@@ -871,7 +879,8 @@ export function compute(def, db) {
     }
     const replacedBy = (name) => {
       const n = normFeat(name);
-      const hit = replaced.find((r) => r.key && (n === r.key || (n.length > 3 && (r.key.startsWith(n) || n.startsWith(r.key)))));
+      const hit = replaced.find((r) => replacesFeature(r.key, name));
+      void n;
       return hit ? hit.by : '';
     };
     const feats = [];
@@ -885,22 +894,32 @@ export function compute(def, db) {
     for (const p of pathsOf(c)) for (const f of p.powers || []) if (f.level <= lvl) feats.push({ ...f, archetype: p.name, key: `${p.id}:${f.name}` });
     for (const f of feats) {
       const ov = (d.classFeatures || {})[f.key] || {};
-      const hiddenDefault = HIDDEN_FEATURES.test(f.name);
+      const cleanName = String(f.name).replace(/\s*\((?:Ex|Su|Sp)(?:\s*(?:or|\/|,)\s*(?:Ex|Su|Sp))*\)\s*$/i, '');
+      const hiddenDefault = HIDDEN_FEATURES.test(cleanName);
       // domain/bloodline powers that have their own statblock spot (Sp block, Resist line)
       const pathPower = pathsOf(c).some((p) => f.key.startsWith(`${p.id}:`));
       const pathHidden = pathPower && (f.type === 'Sp' || /(acid|cold|electricity|fire|sonic|energy) resistance$/i.test(f.name));
-      const placement = ov.placement || (hiddenDefault || pathHidden ? 'hidden' : guessPlacement(f));
+      const asFeat = (out.autoFeats || []).some((x) => featKey(x.name) === featKey(cleanName)) || (d.feats || []).some((x) => featKey(x.name) === featKey(cleanName));
+      const placement = ov.placement || (hiddenDefault || pathHidden || asFeat ? 'hidden' : guessPlacement(f));
       const latest = f.archetype ? '' : (latestValue[normFeat(f.name)] || findLatest(latestValue, f.name));
       const value = latest ? (latest.match(/\(([^)]*)\)|\s([+-]?\d+d?\d*)$/) || [])[1] || (latest.match(/\s([+-]?\d+d?\d*)$/) || [])[1] : '';
       const entry = { key: f.key, classId: c.def.id, className: c.def.name, archetype: f.archetype || '', name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText, auto: (out.classEffectNotes || {})[`${c.def.id}:${f.name}`] || '' };
       out.classFeatureList.push(entry);
       const computedShort = (out.classShorts || {})[`${c.def.id}:${f.name}`];
-      if (placement !== 'hidden') abilities.push({ name: f.name, kind: f.type, placement, short: `${computedShort || `${f.name.toLowerCase()}${value ? ` (${value})` : ''}`}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
+      if (placement !== 'hidden') abilities.push({ name: cleanName, kind: f.type, placement, short: `${computedShort || `${cleanName.toLowerCase()}${value && !/^(ex|su|sp)( or (ex|su|sp))?$/i.test(value) ? ` (${value})` : ''}`}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
     }
     // talents: limit from the class table ("Knight Talent" at 2nd, 4th…), minus talents an archetype replaces
     for (const g of talentDB[c.def.id] || []) {
       const base = g.perLevel && g.perLevel.length ? g.perLevel[Math.min(lvl, g.perLevel.length) - 1] : null;
-      const lost = archFeats.filter((f) => (f.replaces || []).some((r) => normFeat(r).replace(/s$/, '') === g.key || normFeat(r).replace(/s$/, '') === g.key.replace(/s$/, ''))).length;
+      // talents an archetype takes away: "replaces the discoveries gained at 2nd and 6th levels" counts each level ≤ class level
+      const stem = g.key.replace(/(ies|ys|s)$/, (m0) => (m0 === 'ies' ? 'y' : m0 === 'ys' ? 'y' : ''));
+      let lost = 0;
+      for (const f of archFeats) for (const r of f.replaces || []) {
+        const rr = r.toLowerCase().replace(/discoveries/g, 'discovery').replace(/hexes/g, 'hex');
+        if (!rr.includes(stem)) continue;
+        const lv = [...rr.matchAll(/(\d+)(?:st|nd|rd|th)/g)].map((m0) => Number(m0[1])).filter((x) => x <= lvl);
+        lost += lv.length ? lv.length : 1;
+      }
       const allowed = base === null ? null : Math.max(0, base - lost);
       const chosen = (d.talents || []).filter((t) => t.classId === c.def.id && t.group === g.group);
       const pIds = pathsOf(c).map((p) => p.id);
@@ -960,6 +979,24 @@ export function compute(def, db) {
 
 
 const HIDDEN_FEATURES = /^(ac bonus|unarmed strike|fast movement|rage powers?|hexe?s?|discovery|discoveries|magus arcana|ninja tricks?|mercy|mercies|cruelty|cruelties|revelations?|arcanist exploits?|ki powers?|slayer talents?|investigator talents?|vigilante talents?|social talents?|rogue talents?|animal companion .*|.*archetypes$|damage reduction|spellcasting|weapon proficiency|armor proficiency|armor and shield proficiency|domains?|bloodline|arcane school|mystery|spirit|bonus feats?|alchemy|deeds|ex-|weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
+// does an archetype's "replaces …" text take away this class feature?
+// "standard alchemist bomb" → Bomb; "armor training 1, 2" → Armor Training; "Limit Break (Kinetic Card)" → Limit Breaks
+function replacesFeature(k, name) {
+  if (!k) return false;
+  // "the discoveries gained at 2nd and 6th levels": only some uses are lost (counted in the talent limit)
+  if (/(gained|selected|received) at \d+(st|nd|rd|th)|\d+(st|nd|rd|th)[- ]level (discovery|talent|hex|arcana|rage power|bonus feat)/i.test(k)) return false;
+  const n = normFeat(name);
+  if (!n) return false;
+  const kk = String(k).toLowerCase().replace(/[’']s\b/g, '').replace(/\s*\(.*?\)/g, '').replace(/\b(the|standard|class features?|ability|abilities|normal)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const sing = (x) => x.replace(/ies\b/g, 'y').replace(/(?<!s)s\b/g, '');
+  const a = sing(kk);
+  const b = sing(n);
+  if (!a || !b) return false;
+  if (a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `)) return true;
+  if (b.length >= 4 && new RegExp(`(^|\\s)${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`).test(a)) return true;
+  return a.length > 3 && (b.startsWith(a) || a.startsWith(b));
+}
+
 function normFeat(n) {
   return String(n).replace(/\s*\(.*?\)/g, '').replace(/\s+[+-]?\d+(d\d+)?$/, '').replace(/\s+(I|II|III|IV|V)$/, '').trim().toLowerCase();
 }
@@ -994,6 +1031,21 @@ function guessSkillAbility(name) {
 
 // ------------------------------------------------------------------ CR
 // Monsters: chosen CR. NPCs: FFd20 rule (heroic = level − 1, basic = level − 2; PC wealth +1).
+// feat name → feat entry, built once per feat list and system
+const FEAT_INDEX = new WeakMap();
+function featIndexFor(list, pf) {
+  if (!list) return {};
+  let e = FEAT_INDEX.get(list);
+  if (!e) { e = {}; FEAT_INDEX.set(list, e); }
+  const k = pf ? 'pf' : 'ff';
+  if (!e[k]) {
+    e[k] = {};
+    // FFd20 creatures: the FFd20 version of a feat wins over the Pathfinder one with the same name
+    for (const x of list) if (!(pf && x.source === 'FFd20')) { const key = featKey(x.name); if (!e[k][key] || (!pf && x.source === 'FFd20')) e[k][key] = x; }
+  }
+  return e[k];
+}
+
 export function computeCR(d, out) {
   if (d.crOverride !== null && d.crOverride !== undefined && d.crOverride !== '') return Number(d.crOverride);
   if (d.mode !== 'npc') {

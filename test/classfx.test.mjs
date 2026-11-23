@@ -289,4 +289,40 @@ t('PF class feature texts are clean (no FAQ boxes)', () => {
   assert.ok(!cl.features.some((f) => /^FAQ|Converting NPCs/.test(f.text)));
 });
 
+t('more FFd20 class features: anticipate danger, kinetic aura, ahead of time, duelist stance, toggles', () => {
+  const a = compute(npc('ffd20', 'astrologian', 8), db);
+  const a0 = compute(npc('ffd20', 'astrologian', 2), db);
+  assert.ok(a.ac.parts.some(([v, n]) => v === 2 && n === 'dodge'));
+  const t = compute(npc('ffd20', 'time-mage', 2), db);
+  assert.equal(t.init, compute(npc('ffd20', 'time-mage', 1), db).init + 2);
+  const p = compute(npc('ffd20', 'psychic', 11), db);
+  assert.ok(p.ac.parts.some(([v, n]) => v === 2 && n === 'deflection'));
+  const th = npc('ffd20', 'thief', 5);
+  th.attacks = [{ ...newAttack('melee', false), name: 'dagger', dice: '1d4', light: true }];
+  const off = compute(th, db);
+  const key = off.combatToggles.find((x) => /Mark/.test(x.label)).key;
+  assert.equal(compute({ ...th, toggles: { [key]: true } }, db).attackDetails[0].att, off.attackDetails[0].att + 2);
+  void a0;
+});
+
+t('PF spell lists cover alchemist formulae, investigator and adept; spell info is available', () => {
+  const spells = load('pf-spells.json');
+  for (const c of ['alchemist', 'investigator', 'adept', 'cleric', 'wizard', 'bard']) assert.ok(spells.filter((x) => x.class === c).length > 50, c);
+  const cure = spells.find((x) => x.name === 'Cure Light Wounds' && x.class === 'cleric');
+  assert.equal(cure.level, 1);
+  const info = load('pf-spell-info.json');
+  assert.match(info.Fireball.school, /evocation/);
+  assert.match(info.Fireball.save, /Reflex half/);
+});
+
+t('feats: full PF list with text, FFd20 benefits filled', () => {
+  const f = load('feats.json');
+  const pf = f.filter((x) => x.source === 'Pathfinder');
+  assert.ok(pf.length > 3000);
+  for (const n of ['Eschew Materials', 'Power Attack', 'Greater Weapon Focus']) assert.ok(pf.some((x) => x.name === n), n);
+  assert.match(pf.find((x) => x.name === 'Power Attack').text, /Benefit/);
+  const ffEmpty = f.filter((x) => x.source === 'FFd20' && (x.benefit || '').trim().length < 5);
+  assert.ok(ffEmpty.length < 20, `FFd20 feats without benefit: ${ffEmpty.length}`);
+});
+
 console.log(`${passed} class-effect tests passed`);

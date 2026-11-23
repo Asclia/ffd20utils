@@ -321,7 +321,7 @@ def main():
             else:  # strip FAQ boxes from the d20pfsrd text
                 f['text'] = re.sub(r'FAQ\b.*?\[Source\]\s*', '', f['text'], flags=re.S).strip()
         # sidebars from d20pfsrd that are not class features
-        c['features'] = [f for f in c.get('features', []) if not re.search(r'3rd party|third party|optional rules?|^alternate .*options$|options$|^new |^favored class', f['name'], re.I)]
+        c['features'] = [f for f in c.get('features', []) if not re.search(r'3rd party|third party|optional rules?|^alternate .*options$|options$|^new |^favored class|paizo|^all |^animal companion (feats|archetypes)|\(optional\)|alternate natural attacks|bloodrager bloodlines|druidic herbalism', f['name'], re.I)]
         if c['id'] == 'cleric':
             c['domainSlots'] = True
     json.dump(classes, open(os.path.join(DATA, 'pf-classes.json'), 'w'), ensure_ascii=False, separators=(',', ':'))

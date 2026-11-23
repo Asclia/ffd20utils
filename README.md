@@ -83,6 +83,7 @@ entram a linha *Legendary Actions 3/round* em OFFENSE e as seções LEGENDARY AC
 - **Traços raciais** lidos da página da raça: bônus de perícia, saves, CA/DMC, imunidades e o feat/graduação extra do Humano.
 - **Arquétipos** trocam as características substituídas e as perícias de classe que adicionam ou removem.
 - Pré-requisitos de feat checam também nível de classe ("fighter level 4th") e feats concedidos pela classe.
+- Feats sem automação escrita à mão têm o "+N em X" lido do próprio texto do benefício (ex.: Sociable, Sharp Senses, Warrior Priest); bônus com condição viram nota, como no statblock oficial.
 
 ### Regras da casa: Moogle in the Room / Elephant in the Room
 
@@ -186,7 +187,7 @@ python3 tools/build_data.py ./cache
 ```
 
 Tabelas aleatórias e listas de masmorra (`tables.json`, `monsters.json`) vêm de `tools/build_tables.py`;
-as classes, raças e magias do Pathfinder de `tools/build_pf.py`; os arquétipos do Pathfinder (1.168, do Archives of Nethys) de `tools/build_pf_archetypes.py`; talentos, domínios/linhagens/escolas/mistérios/espíritos e os textos das características de classe do PF de `tools/build_pf_extras.py`. Licenças:
+as classes, raças e magias do Pathfinder de `tools/build_pf.py`; os arquétipos do Pathfinder (1.168, do Archives of Nethys) de `tools/build_pf_archetypes.py`; talentos, domínios/linhagens/escolas/mistérios/espíritos e os textos das características de classe do PF de `tools/build_pf_extras.py`. Feats do PF (lista completa do AoN, com texto) e magias do PF (níveis por classe direto da página de cada magia, mais escola/alcance/duração/save/SR e descrição) vêm de `tools/build_pf_aon.py`; `tools/fix_ff_data.py` completa os benefícios dos feats do FFd20 e limpa textos. Licenças:
 
 - **Maze Rats** © Ben Milton — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Ironsworn: Delve** © Shawn Tomkin — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (via Datasworn).

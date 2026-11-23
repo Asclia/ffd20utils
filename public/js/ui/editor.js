@@ -8,7 +8,7 @@ import {
 } from '../rules/tables.js';
 import { TYPES, SUBTYPES, ELEMENTS, ELEMENT_PT, AFFINITIES, IMMUNITY_GROUPS, SENSES_COMMON, SYSTEMS, elementsFor, elementNamePT, PF_AFFINITIES } from '../rules/types.js';
 import { SKILLS, NPC_SKILL_SELECTIONS } from '../rules/skills.js';
-import { featEffect, featKey } from '../rules/featEffects.js';
+import { featEffect, featKey, effectFromText } from '../rules/featEffects.js';
 import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { exportMarkdown } from '../export.js';
 import { EquipmentSection } from './equipment.js';
@@ -333,7 +333,7 @@ function AutoBuildSection({ def, setDef, c, db, npc }) {
     const s = opts.seed ?? seed;
     setDef((d) => {
       const base = opts.level ? { ...d, classes: d.classes.map((x) => (x.id === main?.id ? { ...x, level: Math.max(1, Math.min(x.level + opts.level, 20)) } : x)) } : d;
-      const r = autoBuild(base, db, { role: role || undefined, parts: parts.filter((p) => p !== 'spells' || caster), seed: s });
+      const r = autoBuild(base, db, { role: role || undefined, parts, seed: s });
       return { ...r.def, autoRole: role };
     });
     if (!opts.silent) toast('NPC montado. Tudo continua editável.');
@@ -618,8 +618,8 @@ function FeatsSection({ def, up, c, db, homebrew }) {
     ${c.autoFeats?.length ? html`<div class="row wrap small"><span class="muted">Concedidos automaticamente:</span>${c.autoFeats.map((f) => html`<span class="chip" title=${`Concedido por ${f.source}`}>${featEffect(f.name) ? '⚙ ' : ''}${f.name} <small class="muted">(${f.source})</small></span>`)}</div>` : null}
     <${ListEditor} items=${def.feats} onChange=${(v) => up({ feats: v })} empty="Nenhum feat."
       render=${(f, set) => {
-        const eff = featEffect(f.name) || (homebrew.feats || []).find((h) => featKey(h.name) === featKey(f.name));
         const info = featInfo(f.name);
+        const eff = featEffect(f.name) || (homebrew.feats || []).find((h) => featKey(h.name) === featKey(f.name)) || (info ? effectFromText(f.name, info.benefit && info.benefit.length > 25 ? info.benefit : info.text || info.benefit) : null);
         const warn = prereqWarn(f);
         return html`<div class="feat-row">
           <div class="row wrap">
@@ -631,6 +631,7 @@ function FeatsSection({ def, up, c, db, homebrew }) {
           </div>
           ${eff?.note ? html`<div class="small auto-note">${eff.note}</div>` : null}
           ${info ? html`<div class="small muted">${info.prerequisites ? html`<i>Pré: ${info.prerequisites}.</i> ` : null}${info.benefit}</div>` : null}
+          ${info?.text && info.text.length > (info.benefit || '').length + 20 ? html`<details class="cf-text"><summary>texto completo</summary><p>${info.text}</p>${info.url ? html`<a href=${info.url} target="_blank" rel="noopener">página ↗</a>` : null}</details>` : null}
           ${warn ? html`<div class="small warn">${warn}</div>` : null}
         </div>`;
       }} />
@@ -719,14 +720,15 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
       <div class="small muted">Já inclui as magias bônus pelo atributo de conjuração.</div></div>`
     : html`<div class="muted small">Sem magias. Adicione uma classe conjuradora ou escolha "Conjura como".</div>`}
     <h4>Magias ${c.pfSpells?.some((p) => !p.spontaneous) ? 'preparadas / conhecidas' : 'conhecidas'}</h4>
-    ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => html`<span class="chip">${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`)}</div>`)}
+    ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => { const si = (db.spellInfo || {})[s.name]; return html`<span class="chip" title=${si ? `${si.school} · ${si.castingTime} · ${si.range}${si.save ? ` · save ${si.save}` : ''}${si.sr ? ` · SR ${si.sr}` : ''}\n\n${si.text.slice(0, 600)}` : ''}>${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`; })}</div>`)}
     <div class="row wrap">
       <${Select} value=${list} onChange=${setList} options=${[...(casterClasses.length ? [['__mine', 'Listas das minhas classes']] : []), ['__all', 'Todas as listas'], ...spellLists.map((x) => [x, `Lista: ${x.replace(/^pf-/, '').replace(/-/g, ' ')}`])]} />
       <${Select} value=${lvFilter} onChange=${setLvFilter} options=${[['', 'todos os níveis'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), `nível ${l}`])]} />
     </div>
     <${SearchPicker} items=${items} getText=${(s) => s.name} onPick=${addSpell} placeholder="Buscar magia…"
       filter=${(s) => (lvFilter === '' || s.level === Number(lvFilter)) && (!maxSL || s.level <= maxSL || lvFilter !== '')}
-      renderItem=${(s) => html`<span><b>${s.name}</b> <span class="src-badge">nv ${s.level}${list.startsWith('__') ? ` · ${s.class.replace(/^pf-/, '').replace(/-/g, ' ')}` : ''}</span><br /><span class="small muted">${s.summary?.slice(0, 160)}</span></span>`} />
+      renderItem=${(s) => { const si = (db.spellInfo || {})[s.name]; return html`<span><b>${s.name}</b> <span class="src-badge">nv ${s.level}${list.startsWith('__') ? ` · ${s.class.replace(/^pf-/, '').replace(/-/g, ' ')}` : ''}</span>
+        ${si ? html` <span class="small muted">${si.school}${si.save ? ` · save: ${si.save}` : ''}${si.range ? ` · ${si.range}` : ''}${si.duration ? ` · ${si.duration}` : ''}</span>` : null}<br /><span class="small muted">${s.summary?.slice(0, 160)}</span></span>`; }} />
     <h4>Spell-Like Abilities</h4>
     <${ListEditor} items=${def.caster.sla || []} onChange=${(v) => upIn('caster', { sla: v })} addLabel="+ SLA" onAdd=${() => upIn('caster', { sla: [...(def.caster.sla || []), { id: uid(), freq: 'At will', name: '' }] })}
       render=${(s, set) => html`<div class="row"><input type="text" class="w-freq" value=${s.freq} onInput=${(e) => set({ freq: e.target.value })} placeholder="At will / 3/day" /><input type="text" value=${s.name} onInput=${(e) => set({ name: e.target.value })} placeholder="magia (DC 15)" /></div>`} />

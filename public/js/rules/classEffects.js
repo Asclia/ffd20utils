@@ -213,6 +213,77 @@ export const CLASS_EFFECTS = {
     fn: (x) => (x.on('mutagen') ? { mods: [{ target: 'str', value: 4, type: 'alchemical' }, { target: 'int', value: -2, type: 'penalty' }, { target: 'ac', value: 2, type: 'natural' }] } : {}),
   },
   'shield block': { note: 'Bônus contra um oponente designado.' },
+
+  // ---------------------------------------------------------------- more Pathfinder class features
+  'favored enemy': {
+    fn: (x) => { const n = x.L >= 1 ? 2 : 0; return { mods: ['attack', 'damage', 'skill:Bluff', 'skill:Knowledge (nature)', 'skill:Perception', 'skill:Sense Motive', 'skill:Survival'].map((t) => ({ target: t, value: n, cond: 'vs. favored enemy' })), note: '+2 (ou mais, conforme a escolha) contra o inimigo favorito; anote o tipo na nota.' }; },
+  },
+  judgment: {
+    toggles: [{ id: 'destruction', label: 'Judgment: destruction' }, { id: 'justice', label: 'Judgment: justice' }, { id: 'protection', label: 'Judgment: protection' }, { id: 'purity', label: 'Judgment: purity' }],
+    fn: (x) => {
+      const n = 1 + Math.floor(x.L / 3);
+      const j = (x.L >= 10 ? 2 : 1);
+      const out = [];
+      if (x.on('destruction')) out.push({ target: 'damage', value: n, type: 'sacred' });
+      if (x.on('justice')) out.push({ target: 'attack', value: 1 + Math.floor(x.L / 5), type: 'sacred' });
+      if (x.on('protection')) out.push({ target: 'ac', value: 1 + Math.floor(x.L / 5), type: 'sacred' });
+      if (x.on('purity')) out.push({ target: 'saves', value: 1 + Math.floor(x.L / 5), type: 'sacred' });
+      void j;
+      return { mods: out };
+    },
+  },
+  challenge: {
+    toggles: [{ id: 'challenge', label: 'Challenge (contra o alvo)' }],
+    fn: (x) => (/cavalier|samurai/.test(x.cls.id) && x.on('challenge') ? { mods: [{ target: 'damage.melee', value: x.L }, { target: 'ac', value: -2, type: 'penalty', cond: 'vs. others' }] } : {}),
+  },
+  'studied combat': {
+    toggles: [{ id: 'studied', label: 'Studied combat' }],
+    fn: (x) => { if (!x.on('studied')) return {}; const n = Math.max(1, Math.floor(x.L / 2)); return { mods: [{ target: 'attack.melee', value: n, type: 'insight' }, { target: 'damage.melee', value: n, type: 'insight' }] }; },
+  },
+  'maneuver training': { fn: (x) => (/^pf-monk$/.test(x.cls.id) ? { mods: [{ target: 'cmb', value: Math.max(0, x.L - Math.floor(x.L * 3 / 4)) }], note: 'CMB usa o nível de monge no lugar do BAB do monge.' } : {}) },
+  'sacred weapon': {
+    fn: (x) => {
+      const dice = x.L >= 20 ? '2d8' : x.L >= 15 ? '2d6' : x.L >= 10 ? '1d10' : x.L >= 5 ? '1d8' : '1d6';
+      const avg = (d) => { const m = /(\d+)d(\d+)/.exec(d || ''); return m ? Number(m[1]) * (Number(m[2]) + 1) / 2 : 0; };
+      return { hooks: [(a, all) => { const w = all.find((y) => !y.natural); return w && a.id === w.id && avg(dice) > avg(a.dice) ? { dice } : null; }], note: `Arma sagrada (arma principal): dano ${dice} se for melhor.` };
+    },
+  },
+  'precise strike': {
+    toggles: [{ id: 'precise', label: 'Precise strike (panache)' }],
+    fn: (x) => (/swashbuckler/.test(x.cls.id) && x.on('precise') ? { hooks: [(a) => (a.kind === 'melee' && isPiercingLight(a) ? { dmg: x.L } : null)] } : {}),
+  },
+  'raging song': {
+    stage: 'abilities',
+    toggles: [{ id: 'song', label: 'Inspired rage (raging song)' }],
+    fn: (x) => { if (!x.on('song')) return {}; const t = x.L >= 16 ? 3 : x.L >= 8 ? 2 : 1; return { mods: [{ target: 'str', value: 2 * t, type: 'morale' }, { target: 'con', value: 2 * t, type: 'morale' }, { target: 'will', value: t, type: 'morale' }, { target: 'ac', value: -1, type: 'rage' }] }; },
+  },
+  'gun training': { fn: (x) => ({ hooks: [(a) => (weaponGroup(a.name) === 'firearms' ? { dmg: Math.max(0, x.m.dex) } : null)], note: 'Soma Des ao dano com armas de fogo.' }) },
+
+  // ---------------------------------------------------------------- more FFd20 class features
+  'anticipate danger': { fn: (x) => { const n = 1 + (x.L >= 8 ? 1 + Math.floor((x.L - 8) / 5) : 0); return { mods: [{ target: 'skill:Perception', value: n }, { target: 'ac', value: n, type: 'dodge' }], note: `+${n} Percepção e +${n} esquiva na CA.` }; } },
+  'silent threat': { fn: (x) => { const n = 1 + (x.L >= 12 ? 1 + Math.floor((x.L - 12) / 3) : 0); return { mods: [{ target: 'skill:Intimidate', value: n }], note: `+${n} em Intimidate.` }; } },
+  "joker's aim": { fn: (x) => { const n = 1 + Math.floor((x.L - 3) / 5); return { hooks: [(a) => (a.thrown || /card|shuriken|chakram|javelin|dart|throwing/i.test(a.name) ? { att: n, dmg: n } : null)], note: `+${n} ataque/dano com armas de arremesso.` }; } },
+  'unholy fortitude': { fn: (x) => { const n = x.L >= 18 ? 6 : x.L >= 11 ? 4 : 2; return { mods: [{ target: 'saves', value: n, cond: 'vs. sleep, stun, paralysis, poison and disease' }] }; } },
+  'kinetic aura': { fn: (x) => { const n = 1 + Math.floor((x.L - 8) / 3); return { mods: [{ target: 'ac', value: n, type: 'deflection' }], note: `+${n} deflexão na CA.` }; } },
+  'ahead of time': { fn: () => ({ mods: [{ target: 'init', value: 2 }], note: '+2 na iniciativa.' }) },
+  'duelist stance': {
+    when: (x) => x.armor === 'none' || x.armor === 'light',
+    fn: (x) => { const n = 1 + Math.floor(x.L / 5); return { mods: [{ target: 'ac', value: n, type: 'dodge', cond: x.shield ? 'with a free off hand' : '' }], note: `+${n} esquiva na CA (arma perfurante em uma mão, outra livre).` }; },
+  },
+  jump: { fn: (x) => (/dragoon/.test(x.cls.id) ? { mods: [{ target: 'skill:Acrobatics', value: x.L, cond: 'to jump' }], note: `+${x.L} em Acrobatics para saltar.` } : {}) },
+  'favored terrain': { fn: () => ({ mods: [{ target: 'init', value: 2, cond: 'in favored terrain' }, ...['Knowledge (geography)', 'Perception', 'Stealth', 'Survival'].map((s) => ({ target: `skill:${s}`, value: 2, cond: 'in favored terrain' }))] }) },
+  mark: {
+    toggles: [{ id: 'mark', label: 'Mark (contra o alvo marcado)' }],
+    fn: (x) => { if (!/thief/.test(x.cls.id) || !x.on('mark')) return {}; const n = 1 + Math.floor(x.L / 5); return { hooks: [(a) => (a.natural ? null : { att: n, dmg: n })], mods: ['Bluff', 'Perception', 'Sense Motive', 'Survival'].map((s) => ({ target: `skill:${s}`, value: n, cond: 'vs. the mark' })) }; },
+  },
+  aim: {
+    toggles: [{ id: 'aim', label: 'Aim (contra o alvo)' }],
+    fn: (x) => { if (!x.on('aim')) return {}; const n = x.v || 1 + Math.floor((x.L - 1) / 5); return { hooks: [(a) => (a.kind === 'ranged' && /bow|crossbow/i.test(a.name) ? { att: n, dmg: n } : null)] }; },
+  },
+  boost: {
+    toggles: [{ id: 'boost', label: 'Boost (3 rodadas)' }],
+    fn: (x) => (/monk/.test(x.cls.id) && x.on('boost') ? { mods: [{ target: 'damage.melee', value: 3 + Math.floor((x.L - 3) / 3) }] } : {}),
+  },
 };
 
 // ------------------------------------------------------------------ statblock text with computed uses/DCs (PF style)
