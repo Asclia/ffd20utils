@@ -178,7 +178,8 @@ export function compute(def, db) {
   out.abilities = abil;
 
   // ---- HD & classes
-  const classes = (d.classes || []).filter((c) => c.level > 0).map((c) => ({ ...c, def: classesDB[c.classId] || (hb.classes || []).find((x) => x.id === c.classId) })).filter((c) => c.def);
+  const classes = (d.classes || []).filter((c) => c.level > 0).map((c) => ({ ...c, def: classesDB[c.classId] || (hb.classes || []).find((x) => x.id === c.classId) })).filter((c) => c.def)
+    .map((c) => withArchetypeCasting(c, classesDB));
   const classLevels = classes.reduce((s, c) => s + Number(c.level), 0);
   // Monsters: Hit Dice follow the PF1e "HD by type and CR" table unless the user typed a value
   const racialHD = d.mode !== 'npc' && d.autoHD && d.cr !== null && d.cr !== undefined ? suggestedHD(type.id, Number(d.cr)) : Math.max(0, Number(d.racialHD) || 0);
@@ -422,7 +423,7 @@ export function compute(def, db) {
         if (ok && sl >= 1 && sl <= maxSL) extra.push({ level: sl, name, kind: p.kind, path: p.name });
       }
       const domainSlot = !!c.def.domainSlots && ps.some((p) => p.kind === 'domain');
-      out.pfSpells.push({ source: c.def.name, classId: c.def.id, cl: c.level, ability: ab, spontaneous: !!c.def.spontaneous, perDay, maxSL, monster: !!c.monster, extra, domainSlot, paths: ps.map((p) => ({ kind: p.kind, name: p.name })) });
+      out.pfSpells.push({ source: c.def.name, classId: c.def.id, lists: c.def.spellLists || [c.def.id], knownAs: c.def.knownAs || c.def.id, castsAs: c.def.castsAs || '', cl: c.level, ability: ab, spontaneous: !!c.def.spontaneous, perDay, maxSL, monster: !!c.monster, extra, domainSlot, paths: ps.map((p) => ({ kind: p.kind, name: p.name })) });
       mp.maxSL = Math.max(mp.maxSL, maxSL);
       mp.parts.push({ source: c.def.name, base: 0, bonus: 0, ability: ab, sl: maxSL, cl: c.level });
     }
@@ -1133,7 +1134,7 @@ function spellBudget(d, pfSpells, ffClasses, abil, db) {
   if (pfSpells.length) {
     pfSpells.forEach((p, i) => {
       const mine = spells.filter((x) => (x.classId ? x.classId === p.classId : i === 0) || pfSpells.length === 1);
-      const table = (db.spellsKnown || {})[p.classId];
+      const table = (db.spellsKnown || {})[p.knownAs || p.classId];
       const known = p.spontaneous && table ? table[Math.min(p.cl, table.length) - 1] || {} : null;
       const levels = [...new Set([...Object.keys(p.perDay), ...Object.keys(known || {})])].map(Number).sort((a, b) => a - b);
       const rows = levels.map((lv) => {
@@ -1141,7 +1142,7 @@ function spellBudget(d, pfSpells, ffClasses, abil, db) {
         return { level: lv, limit: p.spontaneous && !known ? null : limit, perDay: p.perDay[lv] ?? null, chosen: mine.filter((x) => Number(x.level) === lv).length };
       });
       const over = mine.filter((x) => Number(x.level) > p.maxSL).length;
-      out.push({ source: p.source, classId: p.classId, kind: p.spontaneous ? 'known' : 'prepared', rows, maxSL: p.maxSL, beyondMax: over, domainSlot: !!p.domainSlot, noTable: p.spontaneous && !known });
+      out.push({ source: p.source, classId: p.classId, castsAs: p.castsAs, kind: p.spontaneous ? 'known' : 'prepared', rows, maxSL: p.maxSL, beyondMax: over, domainSlot: !!p.domainSlot, noTable: p.spontaneous && !known });
     });
     return out;
   }
@@ -1159,4 +1160,28 @@ function spellBudget(d, pfSpells, ffClasses, abil, db) {
     out.push({ source: c.def.name, classId: c.def.id, kind: 'ff', rows, maxSL, beyondMax: mine.filter((x) => Number(x.level) > maxSL).length, open: rule.open, perLevel: rule.perLevel, total });
   });
   return out;
+}
+
+// ------------------------------------------------------------------ archetypes that make a non-caster cast spells
+// as = class whose spells-per-day table is used; list = spell lists; known = spells-known table (spontaneous);
+// from = first class level with spells (the "as" table may start earlier)
+export const ARCHETYPE_CASTING = {
+  'pf-rogue--eldritch-scoundrel': { as: 'pf-magus', list: ['pf-wizard'], ability: 'int', spontaneous: false },
+  'pf-fighter--child-of-acavna-and-amaznen': { as: 'pf-ranger', list: ['pf-bloodrager'], ability: 'int', spontaneous: false, from: 5 },
+  'pf-vigilante--avenging-beast': { as: 'pf-hunter', list: ['pf-hunter'], ability: 'wis', spontaneous: true, known: 'pf-hunter' },
+  'pf-vigilante--cabalist': { as: 'pf-magus', list: ['pf-witch'], ability: 'int', spontaneous: false, maxSL: 6 },
+  'pf-vigilante--magical-child': { as: 'pf-summoner-unchained', list: ['pf-summoner-unchained'], ability: 'cha', spontaneous: true, known: 'pf-summoner-unchained' },
+  'pf-vigilante--warlock': { as: 'pf-magus', list: ['pf-wizard'], ability: 'int', spontaneous: false, maxSL: 6 },
+  'pf-vigilante--zealot': { as: 'pf-inquisitor', list: ['pf-inquisitor'], ability: 'wis', spontaneous: true, known: 'pf-inquisitor' },
+};
+function withArchetypeCasting(c, classesDB) {
+  const ac = (c.archetypes || []).map((id) => ARCHETYPE_CASTING[id]).find(Boolean);
+  const as = ac && classesDB[ac.as];
+  if (!as || c.def.caster) return c;
+  const levels = c.def.levels.map((r, i) => {
+    const src = as.levels[Math.min(i, as.levels.length - 1)] || {};
+    const on = r.level >= (ac.from || 1);
+    return { ...r, spellsPerDay: on ? Object.fromEntries(Object.entries(src.spellsPerDay || {}).filter(([k]) => Number(k) <= (ac.maxSL || 9))) : {}, spellLevel: on ? Math.min(src.spellLevel || 0, ac.maxSL || 9) : 0 };
+  });
+  return { ...c, def: { ...c.def, caster: true, castingAbility: ac.ability, spontaneous: ac.spontaneous, levels, spellLists: ac.list, knownAs: ac.known || null, castsAs: as.name } };
 }

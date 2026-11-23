@@ -228,7 +228,7 @@ export function buildSpells(def, c, db, seed = 1) {
   };
   for (const cl of c.classes.filter((x) => x.def.caster)) {
     const id = cl.def.id;
-    const lists = ff ? (SPELL_LIST_OF[id] || [id]) : [id];
+    const lists = ff ? (SPELL_LIST_OF[id] || [id]) : (cl.def.spellLists || [id]);
     const pool = db.spells.filter((s) => lists.includes(s.class));
     if (!pool.length) continue;
     const byLv = (L) => pool.filter((s) => s.level === L);

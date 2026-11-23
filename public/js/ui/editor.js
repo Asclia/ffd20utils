@@ -695,7 +695,7 @@ function SpellBudget({ budget }) {
   if (!budget?.length) return null;
   const cls = (r) => (r.limit === null ? '' : r.chosen > r.limit ? 'over' : r.chosen === r.limit ? 'full' : 'left');
   return html`<div class="spell-budget">${budget.map((b) => html`<div class="sbud">
-    <div class="sbud-head"><b>${b.source}</b> <span class="muted small">${b.kind === 'prepared' ? 'preparadas por dia (com bônus de atributo' + ')' + (b.domainSlot ? ' + 1 magia de domínio por nível, já incluída automaticamente' : '')
+    <div class="sbud-head"><b>${b.source}</b>${b.castsAs ? html` <span class="src-badge">arquétipo: magias por dia como ${b.castsAs}</span>` : null} <span class="muted small">${b.kind === 'prepared' ? 'preparadas por dia (com bônus de atributo' + ')' + (b.domainSlot ? ' + 1 magia de domínio por nível, já incluída automaticamente' : '')
       : b.kind === 'known' ? (b.noTable ? 'espontâneo — sem tabela de magias conhecidas' : 'magias conhecidas')
       : b.open ? 'aprende magias de criaturas (sem limite fixo)' : `magias conhecidas (+${b.perLevel} por nível)`} · nível máximo ${b.maxSL ? `${b.maxSL}º` : '—'}</span></div>
     <div class="sbud-rows">${b.rows.map((r) => html`<span class="sbud-cell ${cls(r)}" title=${r.limit === null ? '' : r.chosen > r.limit ? `${r.chosen - r.limit} a mais` : r.chosen < r.limit ? `faltam ${r.limit - r.chosen}` : 'completo'}>
@@ -706,11 +706,13 @@ function SpellBudget({ budget }) {
 
 function MagicSection({ def, up, upIn, c, db, npc }) {
   const casterClasses = c.classes.filter((x) => x.def.caster).map((x) => x.def.id);
+  // archetype casters (eldritch scoundrel → wizard list) bring their own lists
+  const listOf = (id) => c.classes.find((x) => x.def.id === id)?.def.spellLists || SPELL_LIST_OF[id] || [id];
   const pfSys = def.system === 'pf1e';
   const sysSpells = useMemo(() => db.spells.filter((s) => (pfSys ? String(s.class).startsWith('pf-') : !String(s.class).startsWith('pf-'))), [db.spells, pfSys]);
   const spellLists = [...new Set(sysSpells.map((s) => s.class))].sort();
   if (pfSys && def.caster?.pfClass && !casterClasses.includes(def.caster.pfClass)) casterClasses.push(def.caster.pfClass);
-  const defaultList = casterClasses.map((id) => SPELL_LIST_OF[id] || id).flat().find((x) => spellLists.includes(x)) || '__all';
+  const defaultList = casterClasses.map((id) => listOf(id)).flat().find((x) => spellLists.includes(x)) || '__all';
   // follows the caster classes until the user picks a list by hand
   const [listSel, setList] = useState(null);
   const list = listSel && (listSel.startsWith('__') || spellLists.includes(listSel)) ? listSel : defaultList;
@@ -718,12 +720,13 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
   const [custom, setCustom] = useState({ name: '', level: 1 });
   const maxSL = c.mp.maxSL;
   const spells = def.caster?.spells || [];
-  const addSpell = (s) => upIn('caster', { spells: [...spells, { id: uid(), name: s.name, level: s.level, ...(String(s.class).startsWith('pf-') && !list.startsWith('__') ? { classId: s.class } : {}) }] });
+  const ownerOf = (cls) => casterClasses.find((id) => listOf(id).includes(cls)) || cls; // wizard list → the eldritch scoundrel rogue
+  const addSpell = (s) => upIn('caster', { spells: [...spells, { id: uid(), name: s.name, level: s.level, ...(String(s.class).startsWith('pf-') && !list.startsWith('__') ? { classId: ownerOf(s.class) } : {}) }] });
   const removeSpell = (id) => upIn('caster', { spells: spells.filter((x) => x.id !== id) });
   const byLevel = {};
   for (const s of spells) (byLevel[s.level] = byLevel[s.level] || []).push(s);
   const items = useMemo(() => {
-    const mine = casterClasses.map((id) => SPELL_LIST_OF[id] || [id]);
+    const mine = casterClasses.map((id) => listOf(id));
     const ids = list === '__all' || (list === '__mine' && mine.some((x) => !x.length)) ? null : list === '__mine' ? mine.flat() : [list];
     const seen = new Set();
     return sysSpells.filter((s) => (!ids || ids.includes(s.class)) && !seen.has(s.name + s.level) && seen.add(s.name + s.level));

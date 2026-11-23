@@ -404,4 +404,29 @@ t('spell budget: how many spells a caster may pick at its level', () => {
   assert.ok(c.warnings.some((w) => /Magias de 1º nível \(Sorcerer\): 3 escolhidas, limite 2/.test(w)), c.warnings.join('; '));
 });
 
+t('archetypes that cast: eldritch scoundrel uses the wizard list with the magus spells per day', () => {
+  const d = npc('pf1e', 'pf-rogue', 7, { abilities: { str: 10, dex: 16, con: 12, int: 16, wis: 10, cha: 10 } });
+  d.classes[0].archetypes = ['pf-rogue--eldritch-scoundrel'];
+  d.caster = { ...d.caster, spells: [{ id: 'a', name: 'Magic Missile', level: 1, classId: 'pf-rogue' }, { id: 'b', name: 'Fireball', level: 3 }] };
+  const c = compute(d, db);
+  assert.equal(c.pfSpells.length, 1);
+  const p = c.pfSpells[0];
+  assert.equal(p.ability, 'int');
+  assert.deepEqual(p.lists, ['pf-wizard']);
+  // magus 7: 0:5 1:4 2:3 3:1, + Int 16 bonus (1st, 2nd, 3rd)
+  assert.deepEqual(p.perDay, { 0: 5, 1: 5, 2: 4, 3: 2 });
+  const sb = md(d, c);
+  assert.match(sb, /Rogue Spells Prepared\W* \(CL 7th/);
+  assert.match(sb, /3rd \(2; DC 16\)—Fireball/);
+  // without the archetype the rogue casts nothing
+  d.classes[0].archetypes = [];
+  assert.equal(compute(d, db).pfSpells.length, 0);
+  // vigilante zealot: spontaneous, inquisitor table and spells known
+  const z = npc('pf1e', 'pf-vigilante', 4, { abilities: { str: 14, dex: 12, con: 12, int: 10, wis: 14, cha: 10 } });
+  z.classes[0].archetypes = ['pf-vigilante--zealot'];
+  const cz = compute(z, db);
+  assert.equal(cz.pfSpells[0].spontaneous, true);
+  assert.deepEqual(Object.fromEntries(cz.spellBudget[0].rows.map((r) => [r.level, r.limit])), { 0: 6, 1: 4, 2: 2 });
+});
+
 console.log(`${passed} class-effect tests passed`);
