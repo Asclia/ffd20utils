@@ -456,4 +456,25 @@ t('dex to damage (finesse training, fencing grace), off-hand half, 1-HD monsters
   assert.equal(compute(m, db).hd, 10);
 });
 
+t('monster casting without a class: custom (type, ability, progression) or as a class', () => {
+  const m = { ...newCreature('monster', 'pf1e'), type: 'dragon', racialHD: 10, autoHD: false, abilities: { str: 20, dex: 10, con: 16, int: 14, wis: 14, cha: 16 } };
+  m.caster = { ...m.caster, pfMode: 'custom', pfType: 'spontaneous', pfAbility: 'cha', pfProg: 9, pfLevel: 7 };
+  let c = compute(m, db);
+  assert.equal(c.pfSpells.length, 1);
+  assert.deepEqual(c.pfSpells[0].lists, ['pf-sorcerer']);
+  // sorcerer 7 per day 6/5/3 + Cha 16 bonus; known 7/5/3/2
+  assert.deepEqual(c.pfSpells[0].perDay, { 1: 7, 2: 7, 3: 5 }); // sorcerer 7: 6/6/4 + Cha 16; known 7/5/3/2
+  assert.deepEqual(Object.fromEntries(c.spellBudget[0].rows.map((r) => [r.level, r.limit])), { 0: 7, 1: 5, 2: 3, 3: 2 });
+  assert.match(md(m, c), /\bSpells Known\W* \(CL 7th/);
+  assert.ok(!/undefined|Monstro Spells/.test(md(m, c)));
+  // prepared, Wis, up to 6th level → magus table, inquisitor list
+  m.caster = { ...m.caster, pfType: 'prepared', pfAbility: 'wis', pfProg: 6 };
+  c = compute(m, db);
+  assert.deepEqual(c.pfSpells[0].lists, ['pf-inquisitor']);
+  assert.match(md(m, c), /\bSpells Prepared/);
+  // old entries (pfClass only) keep working as "as a class"
+  m.caster = { ...m.caster, pfMode: undefined, pfClass: 'pf-sorcerer', pfLevel: 7 };
+  assert.match(md(m, compute(m, db)), /Sorcerer Spells Known/);
+});
+
 console.log(`${passed} class-effect tests passed`);

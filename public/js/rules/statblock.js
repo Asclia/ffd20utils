@@ -93,7 +93,7 @@ export function buildStatblock(d, c, db) {
   if (pf && c.pfSpells?.length) {
     // Pathfinder: spells per day by class (bonus spells from the casting ability included)
     c.pfSpells.forEach((part, i) => {
-      const label = (i === 0 && d.caster?.listName) || `${part.source} Spells ${part.spontaneous ? 'Known' : 'Prepared'}`;
+      const label = (i === 0 && d.caster?.listName) || `${part.source ? `${part.source} ` : ''}Spells ${part.spontaneous ? 'Known' : 'Prepared'}`;
       B.push({ t: 'plain', text: `<b>${label}</b> (CL ${ordinal(part.cl)}; concentration ${sign(part.cl + (c.abilities[part.ability] === null ? 0 : Math.floor((c.abilities[part.ability] - 10) / 2)))})`, html: true });
       const mine = spells.filter((x) => !x.classId || x.classId === part.classId || c.pfSpells.length === 1);
       for (const lv of Object.keys(part.perDay).map(Number).sort((a, b) => b - a)) {

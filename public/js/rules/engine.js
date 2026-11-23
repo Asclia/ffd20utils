@@ -205,7 +205,7 @@ export function compute(def, db) {
   const casterClasses = classes.filter((c) => c.def.caster);
   let cl = casterClasses.reduce((s, c) => s + Number(c.level), 0);
   if (!pf && d.caster?.tier && d.caster.tier !== 'none') cl = Math.max(cl, hd);
-  if (pf && d.caster?.pfClass && Number(d.caster.pfLevel) > 0) cl = Math.max(cl, Number(d.caster.pfLevel));
+  if (pf && (d.caster?.pfClass || d.caster?.pfMode === 'custom') && Number(d.caster.pfLevel) > 0) cl = Math.max(cl, Number(d.caster.pfLevel));
   if (d.caster?.cl) cl = Number(d.caster.cl);
   out.cl = cl;
 
@@ -400,8 +400,8 @@ export function compute(def, db) {
   out.pfSpells = [];
   if (pf) {
     const casters = classes.filter((c) => c.def.caster).map((c) => ({ def: c.def, level: Number(c.level) }));
-    const asClass = d.caster?.pfClass && (db.classesById || {})[d.caster.pfClass];
-    if (asClass && Number(d.caster.pfLevel) > 0) casters.push({ def: asClass, level: Number(d.caster.pfLevel), monster: true });
+    const mc = monsterCasting(d, db);
+    if (mc) casters.push(mc);
     for (const c of casters) {
       const row = c.def.levels[Math.min(c.level, c.def.levels.length) - 1];
       if (!row || !row.spellsPerDay) continue;
@@ -1158,7 +1158,7 @@ function spellBudget(d, pfSpells, ffClasses, abil, db) {
         return { level: lv, limit: p.spontaneous && !known ? null : limit, perDay: p.perDay[lv] ?? null, chosen: mine.filter((x) => Number(x.level) === lv).length };
       });
       const over = mine.filter((x) => Number(x.level) > p.maxSL).length;
-      out.push({ source: p.source, classId: p.classId, castsAs: p.castsAs, kind: p.spontaneous ? 'known' : 'prepared', rows, maxSL: p.maxSL, beyondMax: over, domainSlot: !!p.domainSlot, noTable: p.spontaneous && !known });
+      out.push({ source: p.source || 'Conjuração própria', classId: p.classId, castsAs: p.castsAs, kind: p.spontaneous ? 'known' : 'prepared', rows, maxSL: p.maxSL, beyondMax: over, domainSlot: !!p.domainSlot, noTable: p.spontaneous && !known });
     });
     return out;
   }
@@ -1200,4 +1200,31 @@ function withArchetypeCasting(c, classesDB) {
     return { ...r, spellsPerDay: on ? Object.fromEntries(Object.entries(src.spellsPerDay || {}).filter(([k]) => Number(k) <= (ac.maxSL || 9))) : {}, spellLevel: on ? Math.min(src.spellLevel || 0, ac.maxSL || 9) : 0 };
   });
   return { ...c, def: { ...c.def, caster: true, castingAbility: ac.ability, spontaneous: ac.spontaneous, levels, spellLists: ac.list, knownAs: ac.known || null, castsAs: as.name } };
+}
+
+// ------------------------------------------------------------------ monsters that cast without a class
+// "custom": spontaneous or prepared, casting ability and progression (spells up to 9th / 6th / 4th level); the tables
+// come from a class with that progression. "class": the Bestiary's "casts spells as a 7th-level sorcerer".
+export const MONSTER_PROGRESSIONS = {
+  9: { label: 'até 9º nível (como sorcerer/wizard/cleric)', spont: 'pf-sorcerer', prep: 'pf-wizard', list: { int: 'pf-wizard', wis: 'pf-cleric', cha: 'pf-sorcerer' } },
+  6: { label: 'até 6º nível (como bard/magus/inquisitor)', spont: 'pf-bard', prep: 'pf-magus', list: { int: 'pf-magus', wis: 'pf-inquisitor', cha: 'pf-bard' } },
+  4: { label: 'até 4º nível (como paladin/ranger)', spont: 'pf-bloodrager', prep: 'pf-paladin', list: { int: 'pf-bloodrager', wis: 'pf-ranger', cha: 'pf-paladin' } },
+};
+export function monsterCasting(d, db) {
+  const k = d.caster || {};
+  const level = Number(k.pfLevel) || 0;
+  if (level <= 0) return null;
+  const mode = k.pfMode || (k.pfClass ? 'class' : '');
+  if (mode === 'class') {
+    const asClass = k.pfClass && (db.classesById || {})[k.pfClass];
+    return asClass ? { def: asClass, level, monster: true } : null;
+  }
+  if (mode !== 'custom') return null;
+  const prog = MONSTER_PROGRESSIONS[k.pfProg || 9] || MONSTER_PROGRESSIONS[9];
+  const spont = k.pfType !== 'prepared';
+  const table = (db.classesById || {})[spont ? prog.spont : prog.prep];
+  if (!table) return null;
+  const ability = k.pfAbility || (spont ? 'cha' : 'int');
+  const list = k.pfList || prog.list[ability];
+  return { def: { ...table, id: 'monster', name: '', caster: true, castingAbility: ability, spontaneous: spont, domainSlots: false, spellLists: [list], knownAs: spont ? table.id : null }, level, monster: true };
 }

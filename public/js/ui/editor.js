@@ -1,7 +1,7 @@
 import { html, useState, useMemo, useEffect, useRef } from '../../vendor/ui.mjs';
 import { Section, Field, Text, TextArea, Num, Select, Check, Chips, SearchPicker, ListEditor, toast, askText, useImageTick } from './components.js';
 import { displaySrc } from '../store.js';
-import { compute, crAnalysis, newAttack, uid } from '../rules/engine.js';
+import { compute, crAnalysis, newAttack, uid, MONSTER_PROGRESSIONS } from '../rules/engine.js';
 import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import {
   ABILITIES, ABILITY_NAMES, ABILITY_LONG, mod, sign, CR_LIST, crLabel, SIZES, SIZE_PT, SIZE_DATA, ALIGNMENTS,
@@ -708,11 +708,14 @@ function SpellBudget({ budget }) {
 function MagicSection({ def, up, upIn, c, db, npc }) {
   const casterClasses = c.classes.filter((x) => x.def.caster).map((x) => x.def.id);
   // archetype casters (eldritch scoundrel → wizard list) bring their own lists
-  const listOf = (id) => c.classes.find((x) => x.def.id === id)?.def.spellLists || SPELL_LIST_OF[id] || [id];
+  const listOf = (id) => (id === 'monster' ? monsterPart?.lists || [] : c.classes.find((x) => x.def.id === id)?.def.spellLists || SPELL_LIST_OF[id] || [id]);
   const pfSys = def.system === 'pf1e';
   const sysSpells = useMemo(() => db.spells.filter((s) => (pfSys ? String(s.class).startsWith('pf-') : !String(s.class).startsWith('pf-'))), [db.spells, pfSys]);
   const spellLists = [...new Set(sysSpells.map((s) => s.class))].sort();
-  if (pfSys && def.caster?.pfClass && !casterClasses.includes(def.caster.pfClass)) casterClasses.push(def.caster.pfClass);
+  const pfMode = def.caster?.pfMode || (def.caster?.pfClass ? 'class' : '');
+  if (pfSys && pfMode === 'class' && def.caster?.pfClass && !casterClasses.includes(def.caster.pfClass)) casterClasses.push(def.caster.pfClass);
+  const monsterPart = pfSys && pfMode === 'custom' ? (c.pfSpells || []).find((p) => p.classId === 'monster') : null;
+  if (monsterPart) casterClasses.push('monster');
   const defaultList = casterClasses.map((id) => listOf(id)).flat().find((x) => spellLists.includes(x)) || '__all';
   // follows the caster classes until the user picks a list by hand
   const [listSel, setList] = useState(null);
@@ -735,15 +738,21 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
   const pfCasters = db.classes.filter((x) => x.system === 'pf1e' && x.caster);
   if (pfSys) return html`<${Section} title="Magia (magias por dia)" id="magic" badge=${c.spellBudget?.length ? c.spellBudget.map((b) => `${b.rows.reduce((a, r) => a + r.chosen, 0)}/${b.rows.some((r) => r.limit === null) ? '—' : b.rows.reduce((a, r) => a + r.limit, 0)}`).join(' · ') : ''} open=${!!c.pfSpells?.length}>
     <div class="grid">
-      <${Field} label="Conjura como (monstro)" hint="Ex.: um monstro que 'conjura como um sorcerer de 7º nível' (PF1e). Classes do NPC já contam sozinhas.">
-        <${Select} value=${def.caster.pfClass || ''} onChange=${(v) => upIn('caster', { pfClass: v, pfLevel: v ? (def.caster.pfLevel || c.hd || 1) : 0 })}
-          options=${[['', '—'], ...pfCasters.map((x) => [x.id, x.name])]} /></${Field}>
-      ${def.caster.pfClass ? html`<${Field} label="Nível de conjurador"><${Num} value=${def.caster.pfLevel} min=${1} max=${20} onInput=${(v) => upIn('caster', { pfLevel: v })} /></${Field}>` : null}
+      <${Field} label="Conjuração própria" hint="Para monstros que conjuram sem ter classe. Personalizado: você define tipo, atributo e progressão. Como uma classe: o formato do Bestiary ('conjura como um sorcerer de 7º nível'). Níveis de classe conjuradora já contam sozinhos.">
+        <${Select} value=${pfMode} onChange=${(v) => upIn('caster', { pfMode: v, pfLevel: v ? (def.caster.pfLevel || c.hd || 1) : 0, ...(v === 'class' ? { pfClass: def.caster.pfClass || 'pf-sorcerer' } : {}) })}
+          options=${[['', 'não conjura'], ['custom', 'personalizado'], ['class', 'como uma classe…']]} /></${Field}>
+      ${pfMode === 'class' ? html`<${Field} label="Classe"><${Select} value=${def.caster.pfClass || ''} onChange=${(v) => upIn('caster', { pfClass: v })} options=${pfCasters.map((x) => [x.id, x.name])} /></${Field}>` : null}
+      ${pfMode === 'custom' ? html`
+        <${Field} label="Tipo"><${Select} value=${def.caster.pfType || 'spontaneous'} onChange=${(v) => upIn('caster', { pfType: v })} options=${[['spontaneous', 'espontâneo (magias conhecidas)'], ['prepared', 'preparado']]} /></${Field}>
+        <${Field} label="Atributo de conjuração"><${Select} value=${def.caster.pfAbility || (def.caster.pfType === 'prepared' ? 'int' : 'cha')} onChange=${(v) => upIn('caster', { pfAbility: v, pfList: '' })} options=${[['int', 'Int'], ['wis', 'Sab'], ['cha', 'Car']]} /></${Field}>
+        <${Field} label="Progressão" hint="Define as magias por dia (e as conhecidas, se espontâneo) pelo nível de conjurador."><${Select} value=${String(def.caster.pfProg || 9)} onChange=${(v) => upIn('caster', { pfProg: Number(v), pfList: '' })} options=${Object.entries(MONSTER_PROGRESSIONS).sort((a, b) => b[0] - a[0]).map(([k, p]) => [k, p.label])} /></${Field}>
+        <${Field} label="Lista de magias"><${Select} value=${def.caster.pfList || ''} onChange=${(v) => upIn('caster', { pfList: v })} options=${[['', 'automática pelo atributo'], ...spellLists.map((x) => [x, x.replace(/^pf-/, '').replace(/-/g, ' ')])]} /></${Field}>` : null}
+      ${pfMode ? html`<${Field} label="Nível de conjurador"><${Num} value=${def.caster.pfLevel} min=${1} max=${20} onInput=${(v) => upIn('caster', { pfLevel: v })} /></${Field}>` : null}
       <${Field} label="Nome da lista" hint="Ex.: Sorcerer Spells Known"><${Text} value=${def.caster.listName} placeholder="automático" onInput=${(v) => upIn('caster', { listName: v })} /></${Field}>
     </div>
-    ${c.pfSpells?.length ? html`<div class="mp-break">${c.pfSpells.map((p) => html`<div><b>${p.source} ${p.cl}</b> (${p.spontaneous ? 'espontâneo' : 'preparado'}, ${p.ability.toUpperCase()} ${c.abilities[p.ability] ?? '—'}): ${Object.entries(p.perDay).map(([lv, n]) => `${lv === '0' ? '0' : ordinal(Number(lv))} ${lv === '0' ? '∞' : n}`).join(' · ')}</div>`)}
+    ${c.pfSpells?.length ? html`<div class="mp-break">${c.pfSpells.map((p) => html`<div><b>${p.source ? `${p.source} ${p.cl}` : `Conjuração própria (CL ${p.cl})`}</b> (${p.spontaneous ? 'espontâneo' : 'preparado'}, ${p.ability.toUpperCase()} ${c.abilities[p.ability] ?? '—'}): ${Object.entries(p.perDay).map(([lv, n]) => `${lv === '0' ? '0' : ordinal(Number(lv))} ${lv === '0' ? '∞' : n}`).join(' · ')}</div>`)}
       <div class="small muted">Já inclui as magias bônus pelo atributo de conjuração.</div></div>`
-    : html`<div class="muted small">Sem magias. Adicione uma classe conjuradora ou escolha "Conjura como".</div>`}
+    : html`<div class="muted small">Sem magias. Adicione uma classe conjuradora ou escolha uma "Conjuração própria".</div>`}
     <h4>Magias ${c.pfSpells?.some((p) => !p.spontaneous) ? 'preparadas / conhecidas' : 'conhecidas'}</h4>
     <${SpellBudget} budget=${c.spellBudget} />
     ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => { const si = (db.spellInfo || {})[s.name]; return html`<span class="chip" title=${si ? `${si.school} · ${si.castingTime} · ${si.range}${si.save ? ` · save ${si.save}` : ''}${si.sr ? ` · SR ${si.sr}` : ''}\n\n${si.text.slice(0, 600)}` : ''}>${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`; })}</div>`)}
