@@ -288,7 +288,7 @@ export const CLASS_EFFECTS = {
 
 // ------------------------------------------------------------------ statblock text with computed uses/DCs (PF style)
 const pos = (n) => Math.max(0, n);
-const SHORTS = {
+export const SHORTS = {
   'channel energy': (x) => `channel energy (${pos(3 + x.m.cha)}/day, DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${x.vText || `${Math.ceil(x.L / 2)}d6`})`,
   'channel positive energy': (x) => `channel positive energy (DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${Math.floor(x.L / 2)}d6)`,
   'channel negative energy': (x) => `channel negative energy (DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${Math.floor(x.L / 2)}d6)`,
@@ -309,10 +309,29 @@ const SHORTS = {
   'smite good': (x) => `smite good (${1 + Math.floor((x.L - 1) / 3)}/day)`,
   'wild shape': (x) => (x.value ? `wild shape (${(x.value.match(/\(([^)]*)\)/) || [, x.value])[1]})` : 'wild shape'),
   judgment: (x) => `judgment ${1 + Math.floor((x.L - 1) / 3)}/day`,
-  'sneak attack': (x) => `sneak attack +${x.ff ? '' : ''}${(x.vText && /d6/.test(x.vText) ? x.vText.replace(/^\+/, '') : `${Math.ceil(x.L / 2)}d6`)}`,
+  'sneak attack': (x) => `sneak attack +${(x.vText && /d6/.test(x.vText) ? x.vText.replace(/^\+/, '') : `${archetypeDice(x) || Math.ceil(x.L / 2)}d6`)}`,
   'studied target': (x) => `studied target +${1 + Math.floor(x.L / 5)}`,
   'arcane bond': () => 'arcane bond',
 };
+
+// an archetype's own progression ("+1d6 at 3rd level. This increases by 1d6 at 7th level, and again at every 4 rogue levels thereafter")
+const WORDNUM = { two: 2, three: 3, four: 4, five: 5, six: 6, other: 2 };
+function archetypeDice(x) {
+  const f = x.f || {};
+  if (!f.archetype || !f.text) return 0;
+  const t = String(f.text).replace(/\s+/g, ' ').split(/(?<=\.) (?=[A-Z][^.]*:)/)[0]; // stop at the first listed option
+  if (/as an? \w+ of (the same|his|her) level|same as a rogue/i.test(t)) return 0; // full rogue progression
+  const start = f.level || 1;
+  if (x.L < start) return 0;
+  const list = /increases? by \+?1d6 at ((?:\d+(?:st|nd|rd|th),? (?:and )?){2,})levels?/i.exec(t);
+  if (list) return 1 + [...list[1].matchAll(/\d+/g)].filter((m) => Number(m[0]) <= x.L).length;
+  const step = /every (\d+|two|three|four|five|six|other) (?:\w+ )?levels?/i.exec(t);
+  const k = step ? (Number(step[1]) || WORDNUM[step[1].toLowerCase()]) : 0;
+  if (!k) return 1;
+  const first = /increases? by \+?1d6 (?:points )?at (\d+)(?:st|nd|rd|th)/i.exec(t);
+  const i0 = first ? Number(first[1]) : start + k;
+  return x.L < i0 ? 1 : 2 + Math.floor((x.L - i0) / k);
+}
 
 const ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
 export function parseFeatureValue(text) {
@@ -384,7 +403,7 @@ export function applyClassEffects({ features, stage, x0, toggles }) {
     const key = effectKey(f.name);
     if (stage === 'rest' && SHORTS[key]) {
       const vt = (String(value || '').match(/(\d+d\d+)/) || [])[1] || '';
-      try { res.shorts[`${cls.id}:${f.name}`] = SHORTS[key]({ ...x0, L, cls, value, vText: vt }); } catch { /* ignore */ }
+      try { res.shorts[`${cls.id}:${f.name}`] = SHORTS[key]({ ...x0, L, cls, value, vText: vt, f }); } catch { /* ignore */ }
     }
     const eff = CLASS_EFFECTS[key];
     if (!eff || !eff.fn) continue;

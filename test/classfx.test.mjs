@@ -325,4 +325,24 @@ t('feats: full PF list with text, FFd20 benefits filled', () => {
   assert.ok(ffEmpty.length < 20, `FFd20 feats without benefit: ${ffEmpty.length}`);
 });
 
+t('archetype swaps: eldritch scoundrel (unchained rogue) has no uncanny dodge or danger sense', () => {
+  for (const cls of ['pf-rogue-unchained', 'pf-rogue']) {
+    const d = npc('pf1e', cls, 9);
+    d.classes[0].archetypes = ['pf-rogue--eldritch-scoundrel'];
+    const c = compute(d, db);
+    const shown = c.classFeatureList.filter((f) => f.placement !== 'hidden').map((f) => f.name.toLowerCase());
+    const gone = c.classFeatureList.filter((f) => f.replacedBy).map((f) => f.name.toLowerCase());
+    for (const n of ['uncanny dodge', 'improved uncanny dodge']) assert.ok(gone.includes(n) && !shown.includes(n), `${cls}: ${n}`);
+    assert.ok(gone.includes(cls.endsWith('unchained') ? 'danger sense' : 'trap sense'));
+    assert.equal(c.classFeatureList.filter((f) => /^sneak attack$/i.test(f.name) && !f.replacedBy).length, 1); // the archetype's version only
+    assert.ok(!/uncanny dodge/.test(md(d, c)));
+    assert.match(md(d, c), /sneak attack \+2d6/); // 1d6 at 3rd, +1d6 at 7th, 11th…
+  }
+  // scroll scoundrel on the unchained rogue: pay it back replaces uncanny dodge, adaptive learning replaces danger sense
+  const d = npc('pf1e', 'pf-rogue-unchained', 8);
+  d.classes[0].archetypes = ['pf-rogue--scroll-scoundrel'];
+  const gone = compute(d, db).classFeatureList.filter((f) => f.replacedBy).map((f) => f.name.toLowerCase());
+  for (const n of ['uncanny dodge', 'improved uncanny dodge', 'danger sense']) assert.ok(gone.includes(n), n);
+});
+
 console.log(`${passed} class-effect tests passed`);

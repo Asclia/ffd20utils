@@ -55,7 +55,8 @@ ORD = r'(\d+)(?:st|nd|rd|th)'
 
 
 def feature_level(t):
-    m = re.search(r'\b[Aa]t ' + ORD + r' level', t) or re.search(r'\b' + ORD + r'[- ]level', t)
+    # the first "at 3rd level" / "until 3rd level" / "beginning at 3rd level" is where the feature starts
+    m = re.search(r'\b(?:[Aa]t|until|[Ff]rom) ' + ORD + r' level', t) or re.search(r'\b' + ORD + r'[- ]level', t)
     return int(m.group(1)) if m else 1
 
 
@@ -68,6 +69,84 @@ def replaces_of(t):
             if re.search(r'[a-z]{3}', x, re.I):
                 out.append(x)
     return out
+
+
+# ------------------------------------------------------------------ what each archetype feature takes away
+# Besides "This ability replaces X", AoN writes "This deed/performance replaces X", "does not gain X",
+# "loses X" and "This modifies X". Those extra forms only count when X is a real feature of the class,
+# so loose sentences ("to replace an animal companion") are not taken as replacements.
+UNCHAINED_ALIAS = {'trap sense': 'danger sense'}  # unchained rogue/barbarian: archetypes that replace trap sense replace danger sense
+
+
+def norm(x):
+    x = str(x).lower().replace('\u2019', "'")
+    x = re.sub(r"'s\b", '', x)
+    x = re.sub(r'\s*\(.*?\)', '', x)
+    x = re.sub(r'\b(the|standard|class features?|ability|abilities|normal|base|his|her|their|its)\b', ' ', x)
+    x = re.sub(r'\s+[+-]?\d+(d\d+)?$', '', x)
+    x = re.sub(r'\s+(i|ii|iii|iv|v)$', '', x)
+    x = re.sub(r'\s+', ' ', x).strip(' .,;:\'"')
+    x = re.sub(r'ies\b', 'y', x)
+    return re.sub(r'(?<!s)s\b', '', x)
+
+
+def feature_hit(phrase, names):
+    """the class feature named in `phrase` ("uncanny dodge or improved uncanny dodge" → both)"""
+    out = []
+    # the list must start with a class feature ("uncanny dodge or improved uncanny dodge"); later parts must be exact,
+    # so "the magical symbol that identifies the summoner and his eidolon" names nothing
+    for i, part in enumerate(re.split(r',|\band\b|\bor\b|/', phrase)):
+        a = norm(part)
+        hit = [n for n in names if norm(n) and (a == norm(n) or (i == 0 and a.startswith(norm(n) + ' ') and len(norm(n)) > 6))]
+        if not hit:
+            if i == 0:
+                return []
+            continue
+        out += [n for n in hit if n not in out]
+    return out
+
+
+# features you pick several times (talents, feats, spells…): the class tables already count those per level,
+# so a loose mention never removes the whole feature
+SELECTABLE = re.compile(r'talent|feat|discover|exploit|hex|revelation|arcana|rage power|spell|cantrip|orison|bloodline|mystery|domain|'
+                        r'deed|ki power|trick|merc|cruelt|stance|evolution|investigator|judgment|spirit|school|order|curse|'
+                        r'favored (enemy|terrain)|weapon training|armor training|combat style|blessing|aspect|infusion|wild talent|song|performance', re.I)
+
+
+def extra_replaces(f, names, cls_name):
+    t = f['text']
+    out = []
+    if f.get('replaces'):  # the explicit "replaces …" already says exactly what goes (e.g. "judgment 1/day" only)
+        names = []
+    first = t.split('\n')[0]  # options listed under the feature are not the feature itself
+    for m in re.finditer(r"(?<!\bto )(?<!\bcan )(?<!\bmay )(?<!\bcould )(?<!\bmust )\b(?:replaces?|loses?|(?:does not|doesn't|do not|doesn\u2019t|never) (?:gain|receive|get|have)) (?:access to )?([^.;:]+)", first):
+        tail = m.group(1)
+        if re.match(r'\s*(this|that|these|it)\b', tail) or re.search(r'\buntil\b|\bas (a )?class skills?\b', tail):
+            continue
+        out += [n for n in feature_hit(tail, names) if not SELECTABLE.search(n)]
+    # "This modifies/alters sneak attack": the archetype's own version takes the place of the class feature
+    if re.search(r'\b(?:This|this|It|it)(?: \w+)? (?:modifies|alters|changes)\b', first):
+        own = norm(f['name'])
+        out += [n for n in (names or []) if norm(n) == own and not SELECTABLE.search(n)]
+    return out
+
+
+def refine(archetypes, classes):
+    feats = {c['id']: [f['name'] for f in c.get('features', [])] for c in classes}
+    for a in archetypes:
+        cid = a['classId'][3:]
+        names = list(dict.fromkeys(feats.get(cid, []) + feats.get(cid + '-unchained', [])))
+        for f in a['features']:
+            rep = list(f.get('replaces') or [])
+            for x in extra_replaces(f, names, cid):
+                if not any(norm(x) == norm(r) for r in rep):
+                    rep.append(x.lower())
+            for r in list(rep):
+                al = UNCHAINED_ALIAS.get(norm(r))
+                if al and al not in rep:
+                    rep.append(al)
+            f['replaces'] = rep
+    return archetypes
 
 
 def parse_archetype(page):
@@ -101,6 +180,16 @@ def parse_archetype(page):
 
 
 def main():
+    if sys.argv[1:] == ['--refine']:  # re-read the replacements of the current file (no download)
+        out = refine(json.load(open(OUT)), json.load(open(PF_CLASSES)))
+        for a in out:
+            for f in a['features']:
+                if re.search(r'\buntil \d+(?:st|nd|rd|th) level', f['text'].split('\n')[0]):
+                    f['level'] = feature_level(f['text'])
+        with open(OUT, 'w', encoding='utf8') as fh:
+            json.dump(out, fh, ensure_ascii=False, separators=(',', ':'))
+        print(len(out), 'archetypes refined')
+        return
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
@@ -143,6 +232,7 @@ def main():
             k = f['name'].lower()
             if k in lv and not re.search(r'\b[Aa]t \d+(?:st|nd|rd|th) level|\d+(?:st|nd|rd|th)[- ]level', f['text']):
                 f['level'] = lv[k]
+    refine(out, json.load(open(PF_CLASSES)))
     seen = set()
     out = [x for x in out if not (x['id'] in seen or seen.add(x['id']))]
     out.sort(key=lambda x: (x['classId'], x['name']))
