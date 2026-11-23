@@ -97,6 +97,13 @@ export function Modal({ title, onClose, children, wide, actions }) {
 }
 
 let toastSetter = null;
+// re-render when images downloaded from Koofr arrive
+export function useImageTick() {
+  const [t, setT] = useState(0);
+  useEffect(() => { const f = () => setT((x) => x + 1); window.addEventListener('compendium-images', f); return () => window.removeEventListener('compendium-images', f); }, []);
+  return t;
+}
+
 export function Toasts() {
   const [list, setList] = useState([]);
   toastSetter = setList;

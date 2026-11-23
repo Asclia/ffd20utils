@@ -1,0 +1,8 @@
+{
+  "appId": "com.compendium.app",
+  "appName": "Compendium",
+  "webDir": "public",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" },
+  "plugins": { "CapacitorHttp": { "enabled": false } }
+}

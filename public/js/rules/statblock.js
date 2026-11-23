@@ -206,7 +206,7 @@ export function statblockHTML(blocks, opts = {}) {
   for (const b of blocks) {
     switch (b.t) {
       case 'title': out.push(`<div class="sb-title"><span>${esc(b.name)}</span><span>CR ${esc(b.cr)}${b.mr ? `/${esc(b.mr)}` : ''}</span></div>`); break;
-      case 'image': if (!opts.noImage) out.push(`<div class="sb-image${b.transparent ? ' transparent' : ''}"><img src="${esc(b.src)}" alt="${esc(b.alt || '')}"></div>`); break;
+      case 'image': if (!opts.noImage) { const src = opts.imageSrc ? opts.imageSrc(b.src) : b.src; if (src) out.push(`<div class="sb-image${b.transparent ? ' transparent' : ''}"><img src="${esc(src)}" alt="${esc(b.alt || '')}"></div>`); } break;
       case 'flavor': out.push(`<p class="sb-flavor">${esc(b.text)}</p>`); break;
       case 'plain': out.push(`<p>${safe(b.text, b.html)}</p>`); break;
       case 'line': out.push(`<p><b>${esc(b.label)}</b> ${safe(b.text, true)}</p>`); break;

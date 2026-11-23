@@ -506,3 +506,54 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 .house-rule { align-items: flex-start; }
 .house-rule input { margin-top: 3px; }
 .path-picker { margin: 4px 0 2px; }
+
+/* ============================================================ phones and small tablets */
+.fab-sb { display: none; }
+@media (max-width: 720px) {
+  .dungeons > *, .dg-main, .dg-editor, .dg-columns > *, .dg-map-col, .dg-side, .battle-grid > *, .library > *, .master-detail > * { min-width: 0; }
+  .dg-editor .ed-toolbar, .dg-settings .row, .battle-bar { flex-wrap: wrap; }
+  .dg-editor .ed-toolbar .ed-name { flex: 1 1 100%; min-width: 0; }
+  .dg-canvas-wrap { max-width: 100%; overflow: auto; }
+  .dg-list { max-height: 30vh; overflow: auto; }
+  body { font-size: 15px; }
+  .topbar { height: auto; flex-wrap: wrap; gap: 6px 10px; padding: 6px 10px 0; }
+  .brand b { font-size: 18px; }
+  .brand svg { width: 26px; height: 26px; }
+  .top-right { margin-left: auto; }
+  .top-right .btn { padding: 4px 9px; }
+  .top-right .tl { display: none; }
+  .tabs { order: 3; width: 100%; height: 44px; overflow-x: auto; }
+  .tabs button { padding: 0 10px; }
+  .tabs button .tl { display: none; }
+  .tabs button .ti { font-size: 20px; }
+  main { padding: 10px; }
+  .ed-toolbar { position: static; padding: 4px 0; gap: 6px; }
+  .ed-toolbar .ed-name { flex: 1 1 100%; font-size: 19px; }
+  .ed-toolbar .btn { padding: 5px 9px; font-size: 13px; }
+  .ed-columns { display: block; }
+  .ed-columns .ed-preview { display: none; position: static; max-height: none; overflow: visible; }
+  .ed-columns.show-sb .ed-form { display: none; }
+  .ed-columns.show-sb .ed-preview { display: flex; }
+  .fab-sb { display: block; position: fixed; right: 14px; bottom: 16px; z-index: 30; border-radius: 22px; padding: 10px 16px; font: inherit; font-weight: 700;
+    background: linear-gradient(180deg, var(--accent2), var(--accent)); color: var(--on-accent); border: 1px solid var(--accent); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  .grid { grid-template-columns: 1fr 1fr; }
+  .ap-grid { grid-template-columns: 1fr; }
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .battle-grid { grid-template-columns: 1fr !important; }
+  .battle-card > header { top: 0; flex-wrap: wrap; }
+  .battle-add { width: 100%; }
+  .bc-body { max-height: none; }
+  .dungeons, .dg-columns, .library, .master-detail, .lib-bottom { grid-template-columns: 1fr; }
+  .dg-list, .lib-tree, .dg-side { position: static; max-height: none; }
+  .dg-canvas-wrap { max-height: 70vh; }
+  .modal-back { padding: 0; }
+  .modal { border-radius: 0; min-height: 100vh; }
+  .lib-table { display: block; overflow-x: auto; }
+  .statblock { font-size: 14px; }
+  .statblock .sb-image { float: none; margin: 0 0 8px; }
+  .statblock .sb-image img { width: 100%; max-height: 260px; }
+  .toasts { left: 10px; right: 10px; bottom: 70px; }
+  .toast { max-width: none; }
+}
+@media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
+.dg-canvas-wrap canvas:not(.tool-select) { touch-action: none; }

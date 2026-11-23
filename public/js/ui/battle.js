@@ -1,7 +1,8 @@
 // Battle view: several statblocks from the library open side by side (boss + minions, a whole encounter).
 // The open set is kept on this computer; named encounters are saved in the library folder (synced).
 import { html, useState, useEffect, useMemo } from '../../vendor/ui.mjs';
-import { SearchPicker, Select, toast, askText } from './components.js';
+import { SearchPicker, Select, toast, askText, useImageTick } from './components.js';
+import { displaySrc } from '../store.js';
 import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import { crLabel } from '../rules/tables.js';
 import { useComputed } from './bestiary.js';
@@ -27,6 +28,7 @@ export function Battle({ app, onOpen }) {
   const [encounters, setEncounters] = useState([]);
   const comp = useComputed(app);
   const look = useAppearance();
+  useImageTick();
   const byId = useMemo(() => Object.fromEntries(app.entries.map((e) => [e.id, e])), [app.entries]);
   useEffect(() => { saveBattle(b); }, [b]);
   useEffect(() => { app.store.getDoc('encounters', []).then((x) => setEncounters(Array.isArray(x) ? x : [])); }, [app.store]);
@@ -109,7 +111,7 @@ export function Battle({ app, onOpen }) {
         const c = comp[s.entryId];
         const maxHP = c?.hp?.avg;
         const hp = s.hp ?? maxHP;
-        const sb = e && c ? statblockHTML(buildStatblock(e, c, app.db), { abilityLayout: look.sbAbilityLayout }) : '';
+        const sb = e && c ? statblockHTML(buildStatblock(e, c, app.db), { abilityLayout: look.sbAbilityLayout, imageSrc: displaySrc }) : '';
         return html`<section class="battle-card ${s.collapsed ? 'collapsed' : ''}" key=${s.id}>
           <header>
             <button class="icon" onClick=${() => setSlot(s.id, { collapsed: !s.collapsed })} title=${s.collapsed ? 'Expandir' : 'Recolher'}>${s.collapsed ? '▸' : '▾'}</button>

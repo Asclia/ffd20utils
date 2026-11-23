@@ -1,5 +1,6 @@
 import { html, useState, useMemo, useEffect, useRef } from '../../vendor/ui.mjs';
-import { Section, Field, Text, TextArea, Num, Select, Check, Chips, SearchPicker, ListEditor, toast, askText } from './components.js';
+import { Section, Field, Text, TextArea, Num, Select, Check, Chips, SearchPicker, ListEditor, toast, askText, useImageTick } from './components.js';
+import { displaySrc } from '../store.js';
 import { compute, crAnalysis, newAttack, uid } from '../rules/engine.js';
 import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import {
@@ -26,10 +27,12 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
   const c = useMemo(() => compute(def, { ...db, homebrew }), [def, db, homebrew]);
   const blocks = useMemo(() => buildStatblock(def, c, db), [def, c, db]);
   const look = useAppearance();
-  const sbHTML = useMemo(() => statblockHTML(blocks, { abilityLayout: look.sbAbilityLayout }), [blocks, look.sbAbilityLayout]);
+  const imgTick = useImageTick();
+  const sbHTML = useMemo(() => statblockHTML(blocks, { abilityLayout: look.sbAbilityLayout, imageSrc: displaySrc }), [blocks, look.sbAbilityLayout, imgTick]);
   const up = (patch) => setDef((d) => ({ ...d, ...patch }));
   const upIn = (key, patch) => setDef((d) => ({ ...d, [key]: { ...(d[key] || {}), ...patch } }));
   const npc = mode === 'npc';
+  const [showSB, setShowSB] = useState(false); // phones: form or statblock
 
   useEffect(() => {
     const k = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); onSave(); } };
@@ -50,7 +53,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
       <button class="btn" onClick=${() => exportMarkdown(app, def, c)}>Exportar .md</button>
       <button class="btn ghost" onClick=${onNew}>Novo</button>
     </div>
-    <div class="ed-columns">
+    <div class=${`ed-columns ${showSB ? 'show-sb' : ''}`}>
       <div class="ed-form">
         <${IdentitySection} def=${def} up=${up} folders=${folders} app=${app} />
         ${npc ? html`<${NpcRaceSection} def=${def} up=${up} db=${db} c=${c} homebrew=${homebrew} />` : html`<${MonsterTypeSection} def=${def} up=${up} c=${c} homebrew=${homebrew} db=${db} />`}
@@ -70,6 +73,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
         <${ModifiersSection} def=${def} up=${up} />
         <${ExtrasSection} def=${def} up=${up} upIn=${upIn} c=${c} npc=${npc} />
       </div>
+      <button class="fab-sb" onClick=${() => { setShowSB(!showSB); window.scrollTo({ top: 0 }); }}>${showSB ? '✎ Editar' : '📜 Statblock'}</button>
       <aside class="ed-preview">
         ${c.warnings.length ? html`<div class="warnings">${c.warnings.map((w) => html`<div>⚠ ${w}</div>`)}</div>` : null}
         <${CombatStates} def=${def} c=${c} up=${up} />
@@ -106,7 +110,7 @@ function IdentitySection({ def, up, folders, app }) {
     </div>
     <div class="image-box" onPaste=${onPaste} tabIndex="0"
       onDragOver=${(e) => e.preventDefault()} onDrop=${(e) => { e.preventDefault(); uploadFile(e.dataTransfer.files[0]); }}>
-      <div class="image-preview">${def.image?.src ? html`<img src=${def.image.src} alt="" />` : html`<span>Sem imagem<br /><small>arraste, cole (Ctrl+V) ou escolha</small></span>`}</div>
+      <div class="image-preview">${def.image?.src ? html`<img src=${displaySrc(def.image.src)} alt="" />` : html`<span>Sem imagem<br /><small>arraste, cole (Ctrl+V) ou escolha</small></span>`}</div>
       <div class="image-controls">
         <${Field} label="Link da imagem (URL)"><${Text} value=${def.image?.kind === 'url' ? def.image.src : ''} placeholder="https://…" onInput=${(v) => up({ image: { src: v.trim(), kind: v.trim() ? 'url' : '', transparent: !!def.image?.transparent } })} /></${Field}>
         <div class="row">

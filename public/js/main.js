@@ -108,22 +108,31 @@ function App() {
     })();
   }, []);
   // library folder changed by a sync app (Koofr, Dropbox…) while the program is open: reload
+  // Koofr (Android app): changes made on another device, checked every 20 s
   useEffect(() => {
-    if (!store || store.kind !== 'server') return undefined;
+    if (!store) return undefined;
+    if (window.__koofrError) toast(`Koofr: ${window.__koofrError}`, 'error');
+    if (store.kind === 'koofr' && store.offline) toast('Sem conexão com o Koofr: mostrando a última cópia salva no aparelho.', 'error');
+    if (store.kind !== 'server' && store.kind !== 'koofr') return undefined;
     let last = null;
     let alive = true;
+    const sig = (list) => (list || []).map((e) => `${e.id}:${e.updatedAt || 0}`).sort().join('|');
     const poll = async () => {
-      const r = await fetch('/api/library/revision', { cache: 'no-store' }).then((x) => x.json()).catch(() => null);
+      const r = store.kind === 'server'
+        ? await fetch('/api/library/revision', { cache: 'no-store' }).then((x) => x.json()).catch(() => null)
+        : await store.revision().then((revision) => ({ revision })).catch(() => null);
       if (!alive || !r) return;
       if (last !== null && r.revision !== last) {
         const [en, fo, hb] = await Promise.all([store.listEntries(), store.getDoc('folders', []), store.getDoc('homebrew', {})]);
-        setEntries((en || []).map(normalize)); setFoldersState(fo || []); setHomebrewState(hb || {});
-        toast('Biblioteca atualizada (alterações vindas da pasta sincronizada).');
+        let changed = false;
+        setEntries((cur) => { changed = sig(cur) !== sig(en); return (en || []).map(normalize); });
+        setFoldersState(fo || []); setHomebrewState(hb || {});
+        if (changed) toast('Biblioteca atualizada (alterações vindas de outro aparelho).');
       }
       last = r.revision;
     };
     poll();
-    const iv = setInterval(poll, 4000);
+    const iv = setInterval(poll, store.kind === 'server' ? 4000 : 20000);
     return () => { alive = false; clearInterval(iv); };
   }, [store]);
   useEffect(() => { try { localStorage.setItem('tab', tab); } catch { /* ignore */ } }, [tab]);
@@ -183,8 +192,8 @@ function App() {
       <button class="brand" onClick=${() => setTab('bestiary')} title="Compendium"><${Emblem} /><b>Compendium</b></button>
       <nav class="tabs">${TABS.map(([k, l, i]) => html`<button class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)} title=${TAB_TITLES[k] || l}><span class="ti">${i}</span><span class="tl">${l}</span>${(k === 'monster' || k === 'npc') && isDirty(k) ? html`<i class="dot" title="Alterações não salvas">●</i>` : null}</button>`)}</nav>
       <div class="top-right">
-        <span class="store-kind" title=${store.kind === 'server' ? 'Salvando em arquivos na pasta da biblioteca' : 'Salvando no navegador'}>${store.kind === 'server' ? '💾' : '🌐'}</span>
-        <button class="btn small ghost" onClick=${() => setShowAppearance(true)} title="Tema, cores, fontes e tamanho">🎨 Aparência</button>
+        <span class="store-kind" title=${store.kind === 'server' ? 'Salvando em arquivos na pasta da biblioteca' : store.kind === 'koofr' ? `Salvando no Koofr (${store.root})${store.offline ? ' — sem conexão' : ''}` : 'Salvando no navegador'}>${store.kind === 'server' ? '💾' : store.kind === 'koofr' ? (store.offline ? '⛅' : '☁️') : '🌐'}</span>
+        <button class="btn small ghost" onClick=${() => setShowAppearance(true)} title="Tema, cores, fontes e tamanho">🎨 <span class="tl">Aparência</span></button>
       </div>
     </header>
     <main><${ErrorBoundary} key=${tab}>

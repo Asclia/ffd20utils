@@ -249,7 +249,7 @@ function DungeonEditor({ app, idx, doc, setDoc, dirty, onSave, onDelete, onOpenE
           <button class="tool" title="Aumentar" onClick=${() => setCellSize(Math.min(40, cell + 4))}>+</button>
         </div>
         <div class="dg-canvas-wrap">
-          <canvas ref=${canvasRef} class=${`tool-${tool}`} onMouseDown=${down} onMouseMove=${move} onMouseUp=${upMouse} onMouseLeave=${() => { painting.current = false; setHover(null); if (drag) upMouse(); }}></canvas>
+          <canvas ref=${canvasRef} class=${`tool-${tool}`} onPointerDown=${(e) => { if (tool !== 'select') e.currentTarget.setPointerCapture?.(e.pointerId); down(e); }} onPointerMove=${move} onPointerUp=${upMouse} onPointerCancel=${upMouse} onPointerLeave=${() => { painting.current = false; setHover(null); if (drag) upMouse(); }}></canvas>
         </div>
         <div class="muted small">${(TOOLS.find((t) => t[0] === tool) || [])[2]} · cada quadrado = 5 ft · Ctrl+Z desfaz</div>
       </div>

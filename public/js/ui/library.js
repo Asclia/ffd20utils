@@ -6,6 +6,7 @@ import { folderPath } from './editor.js';
 import { useComputed, Viewer } from './bestiary.js';
 import { exportManyZip, exportToVault, exportJSON } from '../export.js';
 import { HOUSE_RULES, defaultHouseRules } from '../rules/houseRules.js';
+import { koofrConfig, setKoofrConfig, openKoofrStore } from '../store.js';
 
 export function Library({ app, onOpen }) {
   const [sel, setSel] = useState('__all');
@@ -150,7 +151,7 @@ export function Library({ app, onOpen }) {
             <input ref=${fileRef} type="file" accept=".json,application/json" style="display:none" onChange=${(e) => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; }} />
           </div>
         </div>
-        ${app.store.kind === 'server' ? html`<${LibraryFolder} app=${app} />` : null}
+        ${app.store.kind === 'server' ? html`<${LibraryFolder} app=${app} />` : html`<${KoofrPanel} app=${app} />`}
         <${Settings} app=${app} />
         <${HouseRules} app=${app} />
       </div>
@@ -182,6 +183,59 @@ function Settings({ app }) {
 }
 
 // ------------------------------------------------------------------ library folder (Koofr, Dropbox, MEGA…)
+// Android app / browser: the library in a Koofr folder (the same one the Koofr desktop app syncs on the PC)
+function KoofrPanel({ app }) {
+  const cur = koofrConfig() || {};
+  const [f, setF] = useState({ email: cur.email || '', password: cur.password || '', root: cur.root || '/Compendium' });
+  const [busy, setBusy] = useState(false);
+  const connect = async () => {
+    if (!f.email || !f.password) return toast('Preencha o e-mail e a senha de aplicativo do Koofr.', 'error');
+    setBusy(true);
+    try {
+      const root = `/${f.root.replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+      const s = await openKoofrStore({ ...f, root }, { strict: true });
+      // real round trip (folder, write, read back, delete) so a problem shows up now, not on the first save
+      await s.k.ensureDir(root);
+      const probe = JSON.stringify({ test: Date.now() });
+      await s.k.putText(root, '.compendium-test.json', probe);
+      const back = await s.k.getText(`${root}/.compendium-test.json`);
+      await s.k.remove(`${root}/.compendium-test.json`);
+      if (!String(back).includes('test')) throw new Error('Koofr: o arquivo de teste não voltou igual.');
+      const existing = (await s.k.list(root) || []).filter((x) => x.name !== '.compendium-test.json');
+      // first connection from a phone that already has statblocks: offer to send them
+      const local = app.store.kind === 'browser' ? app.entries : [];
+      if (local.length && confirm(`Enviar os ${local.length} statblock(s) deste aparelho para a pasta ${root} do Koofr?`)) {
+        await s.k.ensureDir(root);
+        for (const e of local) await s.saveEntry(e);
+        for (const d of (await app.store.listDungeons()) || []) await s.saveDungeon(d);
+        if (!existing || !existing.some((x) => x.name === 'folders.json')) await s.putDoc('folders', app.folders);
+        if (!existing || !existing.some((x) => x.name === 'homebrew.json')) await s.putDoc('homebrew', app.homebrew);
+      }
+      setKoofrConfig({ ...f, root });
+      toast(existing ? `Conectado: pasta ${root} encontrada.` : `Conectado: a pasta ${root} será criada no primeiro salvamento.`);
+      setTimeout(() => location.reload(), 600);
+    } catch (e) {
+      toast(e.message || String(e), 'error');
+    } finally { setBusy(false); }
+  };
+  const disconnect = () => { if (!confirm('Desconectar do Koofr? A biblioteca continua no Koofr; este aparelho volta a usar só os dados locais.')) return; setKoofrConfig(null); location.reload(); };
+  const on = app.store.kind === 'koofr';
+  return html`<div class="panel">
+    <h4>Koofr ${on ? html`<span class="saved">● conectado${app.store.offline ? ' (sem conexão agora)' : ''}</span>` : null}</h4>
+    <div class="muted small">A biblioteca fica numa pasta do Koofr — a mesma que o app do Koofr sincroniza no PC. Se no PC a pasta da biblioteca é
+      <code>…\Koofr\Compendium</code>, aqui use <code>/Compendium</code>. Crie uma <b>senha de aplicativo</b> no site do Koofr
+      (Preferências → Senha → Gerar nova senha) e use-a aqui, não a sua senha normal.</div>
+    <${Field} label="E-mail do Koofr" wide><${Text} value=${f.email} onInput=${(v) => setF({ ...f, email: v.trim() })} placeholder="voce@exemplo.com" /></${Field}>
+    <${Field} label="Senha de aplicativo" wide><input type="password" value=${f.password} onInput=${(e) => setF({ ...f, password: e.currentTarget.value.trim() })} placeholder="gerada no Koofr" /></${Field}>
+    <${Field} label="Pasta da biblioteca no Koofr" wide><${Text} value=${f.root} onInput=${(v) => setF({ ...f, root: v })} placeholder="/Compendium" /></${Field}>
+    <div class="row wrap">
+      <button class="btn primary" disabled=${busy} onClick=${connect}>${busy ? 'Conectando…' : on ? 'Salvar e reconectar' : 'Conectar'}</button>
+      ${on ? html`<button class="btn ghost danger" onClick=${disconnect}>Desconectar</button>` : null}
+      ${!/^https?:/.test(location.protocol) || window.Capacitor ? null : html`<span class="muted small">No navegador o Koofr pode bloquear a conexão; no app de Android funciona direto.</span>`}
+    </div>
+  </div>`;
+}
+
 // Moogle in the Room / Elephant in the Room: each rule on or off (stored with the homebrew, synced)
 function HouseRules({ app }) {
   const r = { ...defaultHouseRules(), ...(app.homebrew.houseRules || {}) };

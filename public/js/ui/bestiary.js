@@ -1,11 +1,12 @@
 import { html, useState, useMemo } from '../../vendor/ui.mjs';
-import { Modal, Select, toast } from './components.js';
+import { Modal, Select, toast, useImageTick } from './components.js';
 import { compute } from '../rules/engine.js';
 import { buildStatblock, statblockHTML } from '../rules/statblock.js';
 import { crLabel } from '../rules/tables.js';
 import { exportMarkdown, exportToVault } from '../export.js';
 import { folderPath } from './editor.js';
 import { loadAppearance } from './appearance.js';
+import { displaySrc } from '../store.js';
 
 const TYPE_ICON = {
   aberration: '👁', animal: '🐾', construct: '⚙', dragon: '🐉', fey: '🧚', humanoid: '🧍', 'magical-beast': '🦁',
@@ -23,6 +24,7 @@ export function useComputed(app) {
 }
 
 export function Bestiary({ app, onOpen }) {
+  useImageTick();
   const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
   const [groupBy, setGroupBy] = useState(pref('best:group', 'type'));
   const [mode, setMode] = useState(pref('best:mode', 'all'));
@@ -74,7 +76,7 @@ const crNum = (s) => { const m = s.match(/CR (\d+)(?:\/(\d+))?/); return m ? (m[
 function Card({ e, c, onClick }) {
   const type = c ? c.type.name : '';
   return html`<button class="card" onClick=${onClick} title=${e.name}>
-    <div class="card-img">${e.image?.src ? html`<img class=${e.image.transparent ? 'transparent' : ''} src=${e.image.src} alt="" loading="lazy" />` : html`<span class="ph">${TYPE_ICON[e.type] || '✦'}</span>`}
+    <div class="card-img">${e.image?.src ? html`<img class=${e.image.transparent ? 'transparent' : ''} src=${displaySrc(e.image.src)} alt="" loading="lazy" />` : html`<span class="ph">${TYPE_ICON[e.type] || '✦'}</span>`}
       <span class="card-cr">CR ${c ? crLabel(c.cr) : '?'}</span>
       ${e.boss && e.boss !== 'none' ? html`<span class="card-boss">${{ mini: 'Mini-Boss', boss: 'Boss', super: 'Super Boss' }[e.boss]}</span>` : null}
     </div>
@@ -85,7 +87,8 @@ function Card({ e, c, onClick }) {
 
 export function Viewer({ app, entry, c, onClose, onOpen }) {
   const comp = c || compute(entry, { ...app.db, homebrew: app.homebrew });
-  const sb = statblockHTML(buildStatblock(entry, comp, app.db), { abilityLayout: loadAppearance().sbAbilityLayout });
+  useImageTick();
+  const sb = statblockHTML(buildStatblock(entry, comp, app.db), { abilityLayout: loadAppearance().sbAbilityLayout, imageSrc: displaySrc });
   const del = async () => {
     if (!confirm(`Excluir "${entry.name}" da biblioteca? Isso não pode ser desfeito.`)) return;
     await app.deleteEntry(entry.id);

@@ -21,6 +21,7 @@ Baixe o arquivo do seu sistema na página
 | Windows | `Compendium-…-portable.exe` | Não instala nada: clique duas vezes e o programa abre. |
 | Linux | `Compendium-…-linux-x86_64.AppImage` | Clique com o botão direito → Propriedades → Permitir executar; depois clique duas vezes. |
 | Linux (Ubuntu/Debian) | `Compendium-…-linux-amd64.deb` | Clique duas vezes para instalar; o programa aparece no menu de aplicativos. |
+| Android | `Compendium-…-android.apk` | Baixe no celular e toque para instalar (permita "instalar apps desconhecidos" para o navegador). Veja [Android](#android). |
 
 > O Windows pode mostrar "O Windows protegeu o computador" na primeira vez, porque o executável
 > não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**.
@@ -159,6 +160,24 @@ Se o aplicativo de sincronização trouxer alterações com o programa aberto, a
 
 > Use um computador por vez e espere o aplicativo de sincronização terminar antes de abrir o programa no outro.
 > Se a mesma criatura for editada em dois PCs ao mesmo tempo, o aplicativo de sincronização pode criar uma "cópia em conflito"; o programa mostra só a versão mais nova.
+
+## Android
+
+O app de Android é o mesmo Compendium, adaptado à tela do celular. A biblioteca fica direto no **Koofr**,
+na mesma pasta que o aplicativo do Koofr sincroniza no computador, então o que você cria no PC aparece no
+celular e vice-versa.
+
+1. No Koofr (site), vá em **Preferências → Senhas** e crie uma **senha de aplicativo** para o Compendium.
+2. No celular, abra a aba **📚 Biblioteca** → painel **Koofr**: informe o e-mail, a senha de aplicativo e o
+   caminho da pasta da biblioteca *dentro do Koofr* (ex.: `/Compendium`, ou onde estiver a pasta que o PC usa).
+3. Toque em **Conectar**. O app faz um teste de gravação e leitura; se funcionar, oferece enviar o que já
+   estava salvo no celular.
+
+- A biblioteca fica guardada no celular: sem internet, você continua consultando (o ícone ⛅ indica modo offline).
+- Mudanças feitas em outro aparelho são buscadas a cada 20 segundos.
+- As configurações (aparência, regras da casa) ficam só no celular. A exportação para o Obsidian não existe no Android.
+- No editor, o botão **📜 Statblock** alterna entre o formulário e o statblock.
+- Atualizações: baixe o `.apk` novo e instale por cima; a biblioteca e a conexão são mantidas.
 
 ## Exportar para o Obsidian
 

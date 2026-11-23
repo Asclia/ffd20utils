@@ -39,8 +39,38 @@ jobs:
             dist/*.deb
           if-no-files-found: error
 
+  # Android app (Capacitor): same web app; the library lives in a Koofr folder
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm test
+      - run: npm run android:prepare
+      - name: Version and signing key (the same key every release, so updates install over the old app)
+        run: |
+          V=$(node -p "require('./package.json').version")
+          CODE=$(node -p "const [a,b,c]=require('./package.json').version.split('.').map(Number); a*10000+b*100+c")
+          sed -i "s/versionCode 1$/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$V\"/" android/app/build.gradle
+          mkdir -p ~/.android && cp android-signing/compendium-debug.keystore ~/.android/debug.keystore
+      - run: cd android && ./gradlew assembleDebug --no-daemon
+      - run: mkdir -p out && cp android/app/build/outputs/apk/debug/app-debug.apk "out/Compendium-$(node -p "require('./package.json').version")-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compendium-android
+          path: out/*.apk
+          if-no-files-found: error
+
   release:
-    needs: build
+    needs: [build, android]
     # Tag push, or a manual run (the release then gets the tag v<version from package.json>)
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -61,4 +91,5 @@ jobs:
           files: out/*
           body: |
             **Windows:** baixe `Compendium-…-instalador.exe` (instala e cria atalho) ou `Compendium-…-portable.exe` (abre direto, sem instalar).
+            **Android:** baixe o `Compendium-…-android.apk` no celular e abra (permita instalar de fontes desconhecidas). Na Biblioteca, conecte sua conta Koofr.
             **Linux:** baixe o `.AppImage` (dê permissão de execução e clique duas vezes) ou o `.deb` (Ubuntu/Debian).

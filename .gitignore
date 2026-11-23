@@ -4,3 +4,4 @@ userdata/
 *.tmp
 __pycache__/
 dist/
+android/

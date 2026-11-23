@@ -1,6 +1,6 @@
 {
   "name": "ffd20utils",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Compendium — criador de monstros, NPCs e masmorras para Final Fantasy d20 (FFd20) e Pathfinder 1e.",
   "type": "module",
   "private": true,
@@ -11,10 +11,11 @@
     "app": "electron .",
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "node test/engine.test.mjs && node test/library.test.mjs && node test/dungeon.test.mjs && node test/autobuild.test.mjs && node test/classfx.test.mjs",
+    "test": "node test/engine.test.mjs && node test/library.test.mjs && node test/dungeon.test.mjs && node test/autobuild.test.mjs && node test/classfx.test.mjs && node test/koofr.test.mjs",
     "build-data": "python3 tools/build_data.py",
     "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "android:prepare": "npx cap add android && npx capacitor-assets generate --android --iconBackgroundColor \"#12101a\" --iconBackgroundColorDark \"#12101a\" && npx cap sync android"
   },
   "main": "desktop/main.js",
   "author": {
@@ -76,6 +77,10 @@
   },
   "devDependencies": {
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "@capacitor/cli": "^6.2.3",
+    "@capacitor/core": "^6.2.3",
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/assets": "^3.0.5"
   }
 }
