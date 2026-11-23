@@ -477,4 +477,14 @@ t('monster casting without a class: custom (type, ability, progression) or as a 
   assert.match(md(m, compute(m, db)), /Sorcerer Spells Known/);
 });
 
+t('attack damage type and custom damage text', () => {
+  const m = { ...newCreature('monster', 'pf1e'), type: 'undead', racialHD: 6, autoHD: false, abilities: { str: 10, dex: 14, con: null, int: 10, wis: 10, cha: 14 } };
+  m.attacks = [{ ...newAttack('ranged', true), id: 'r', name: 'ray of darkness', count: 1, dice: '4d8', dmgAbility: 'none', touch: true, dmgType: 'negative energy' }];
+  assert.match(compute(m, db).attacks.ranged[0], /ray of darkness \+\d+ touch \(4d8 negative energy\)/);
+  m.attacks[0].extra = 'blinded 1 round';
+  assert.match(compute(m, db).attacks.ranged[0], /\(4d8 negative energy plus blinded 1 round\)/);
+  m.attacks[0].dmgText = '4d8 negative energy, Will DC 15 half';
+  assert.match(compute(m, db).attacks.ranged[0], /\(4d8 negative energy, Will DC 15 half\)/);
+});
+
 console.log(`${passed} class-effect tests passed`);

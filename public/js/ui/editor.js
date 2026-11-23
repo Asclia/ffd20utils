@@ -539,17 +539,22 @@ function OffenseSection({ def, up, upIn, c }) {
           <label class="inline">+atq <${Num} value=${a.attackBonus} onInput=${(v) => set({ attackBonus: v })} /></label>
           <label class="inline">+dano <${Num} value=${a.damageBonus} onInput=${(v) => set({ damageBonus: v })} /></label>
           <label class="inline">atrib. dano <${Select} value=${a.dmgAbility} onChange=${(v) => set({ dmgAbility: v })} options=${[['auto', 'auto'], ['str', 'For'], ['dex', 'Des'], ['cha', 'Car (swordskill)'], ['none', 'nenhum']]} /></label>
+          <label class="inline" title="Vai logo depois do dano, sem 'plus': (4d8 negative energy)">tipo de dano <input type="text" class="w-dtype" list="dmg-types" value=${a.dmgType || ''} placeholder="ex.: negative energy" onInput=${(e) => set({ dmgType: e.target.value })} /></label>
+        </div>
+        <div class="row wrap">
+          <label class="inline grow" title="Substitui tudo o que vai entre parênteses. Deixe vazio para o cálculo automático.">texto do dano (opcional) <input type="text" class="w-extra" value=${a.dmgText || ''} placeholder=${`automático: ${(detail[a.id] || '').match(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)/)?.[1] || ''}`} onInput=${(e) => set({ dmgText: e.target.value })} /></label>
         </div>
         <div class="row wrap">
           ${!a.natural ? html`<${Check} label="leve" checked=${a.light} onChange=${(v) => set({ light: v })} /><span title="Arma que funciona com Weapon Finesse sem ser leve (rapier, whip, spiked chain, elven curve blade…). Armas leves já contam; sem Weapon Finesse (ou Finesse Training) não muda nada."><${Check} label="finesse" checked=${a.finesse} onChange=${(v) => set({ finesse: v })} /></span>` : null}
           ${a.kind === 'ranged' ? html`<${Check} label="arremesso (For no dano)" checked=${a.thrown} onChange=${(v) => set({ thrown: v })} />` : null}
           <${Check} label="toque" checked=${a.touch} onChange=${(v) => set({ touch: v })} />
           ${!a.natural ? html`<${Check} label="iterativos" checked=${a.iterative !== false} onChange=${(v) => set({ iterative: v })} />` : null}
-          <input type="text" class="w-extra" value=${a.extra} placeholder="efeito extra (ex.: plus grab, 1d6 fire)" onInput=${(e) => set({ extra: e.target.value })} />
+          <input type="text" class="w-extra" value=${a.extra} placeholder="efeito extra, vira “plus …” (ex.: grab, 1d6 fire)" onInput=${(e) => set({ extra: e.target.value })} />
           <input type="text" class="w-plural" value=${a.plural} placeholder="plural" onInput=${(e) => set({ plural: e.target.value })} title="Plural usado quando qtd > 1" />
         </div>
         <div class="attack-out">${detail[a.id] || ''}</div>
       </div>`} />
+    <datalist id="dmg-types">${['negative energy', 'positive energy', 'fire', 'cold', 'electricity', 'acid', 'sonic', 'force', 'nonlethal', 'bludgeoning', 'piercing', 'slashing', 'bleed', 'Con drain', 'Str damage', 'holy', 'dark', 'ice', 'lightning', 'water', 'wind', 'earth', 'non-elemental'].map((x) => html`<option value=${x} />`)}</datalist>
     <div class="row wrap">
       <div class="weapon-pick"><${WeaponPicker} onPick=${(w) => addWeapon(w.name)} /></div>
       <${Select} value="" onChange=${addNatural} options=${[{ value: '', label: '+ Ataque natural…' }, ...NATURAL_ATTACKS.map((w) => ({ value: w.name, label: `${w.name} (${scaleDiceForSize(w.dice, 'Medium', def.size)}${w.primary ? '' : ', secundário'})` }))]} />

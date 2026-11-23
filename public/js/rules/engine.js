@@ -672,7 +672,10 @@ export function compute(def, db) {
         }
         const extraTxt = (a.extra || '').trim().replace(/^plus\s+/i, '');
         if (extraTxt) riders.push(extraTxt);
-        const dmgStr = `${dice}${dmg ? sign(dmg) : ''}${crit}${riders.length ? ` plus ${riders.join(' and ')}` : ''}`;
+        // damage type right after the dice ("4d8 negative energy"); a custom text replaces the whole parenthesis
+        const dtype = String(a.dmgType || '').trim();
+        const custom = String(a.dmgText || '').trim();
+        const dmgStr = custom || `${dice}${dmg ? sign(dmg) : ''}${dtype ? ` ${dtype}` : ''}${crit}${riders.length ? ` plus ${riders.join(' and ')}` : ''}`;
         const touch = a.touch ? ' touch' : '';
         const text = `${prefix}${label} ${seq.map(sign).join('/')}${touch} (${dmgStr})${ax._notes ? ` (${ax._notes.join('; ')})` : ''}`;
         parts.push(text);

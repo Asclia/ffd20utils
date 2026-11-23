@@ -568,3 +568,6 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 .sbud-cell.full { border-color: var(--ok); }
 .sbud-cell.over { border-color: var(--danger); color: var(--danger); }
 .sbud-cell.left b { color: var(--accent); }
+.w-dtype { width: 150px; }
+label.inline.grow { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+label.inline.grow input { flex: 1; min-width: 120px; }
