@@ -2,7 +2,7 @@ import { html, useState, useMemo } from '../../vendor/ui.mjs';
 import { Section, Field, Num, Select, Check, Chips, ListEditor, SearchPicker } from './components.js';
 import { newAttack } from '../rules/engine.js';
 import { scaleDiceForSize, npcGear, PC_WEALTH } from '../rules/tables.js';
-import { WEAPONS } from '../rules/presets.js';
+import { WEAPONS, weaponAttackFields, weaponGroupLabel } from '../rules/presets.js';
 import { MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { SKILLS } from '../rules/skills.js';
 import {
@@ -45,9 +45,8 @@ export function EquipmentSection({ def, up, c, db }) {
     <${ListEditor} items=${weapons} empty="Nenhuma arma. Adicione abaixo (também aparecem em Ataque e Deslocamento)."
       onChange=${(list) => up({ attacks: [...def.attacks.filter((a) => a.natural), ...list] })}
       render=${(a, set) => html`<${WeaponItem} a=${a} set=${set} specials=${sp.weapon} c=${c} system=${def.system} />`} />
-    <${Select} value="" onChange=${(name) => addWeapon(name, def, up, items)} options=${[{ value: '', label: '+ Arma…' },
-      ...WEAPONS.map((w) => ({ value: `pf:${w.name}`, label: `${w.name} (${w.dice})`, group: 'Pathfinder' })),
-      ...(pf ? [] : items.weapons || []).filter((w) => w.dice && w.dice !== '—').map((w) => ({ value: `ff:${w.name}`, label: `${w.name} (${w.dice})`, group: 'FFd20' }))]} />
+    <div class="weapon-pick"><${WeaponPicker} onPick=${(w) => addWeapon(`${w.src}:${w.name}`, def, up, items)}
+      extra=${(pf ? [] : items.weapons || []).filter((w) => w.dice && w.dice !== '—').map((w) => ({ ...w, src: 'ff', groupLabel: 'FFd20', critRange: w.critRange || 20, critMult: w.critMult || 2 }))} /></div>
 
     <h4>Armadura e escudo</h4>
     <div class="armor-grid">
@@ -94,7 +93,7 @@ function addWeapon(key, def, up, items) {
   const a = newAttack('melee', false);
   if (src === 'pf') {
     const p = WEAPONS.find((x) => x.name === name);
-    Object.assign(a, { name: p.name, kind: p.kind || 'melee', dice: scaleDiceForSize(p.dice, 'Medium', def.size), critRange: p.critRange, critMult: p.critMult, hands: p.hands || 'one', light: !!p.light, finesse: !!p.finesse, thrown: !!p.thrown, range: p.range || '' });
+    Object.assign(a, weaponAttackFields(p, (d) => scaleDiceForSize(d, 'Medium', def.size)));
   } else {
     const w = (items.weapons || []).find((x) => x.name === name);
     const cat = w.category || '';
@@ -139,7 +138,7 @@ function ArmorItem({ label, it, presets, specials, onChange, shield, system }) {
   return html`<div class="armor-card">
     <b>${label}</b>
     <${Select} value=${it ? (presets.some((p) => p.name === it.name) ? it.name : '__custom') : ''} onChange=${pick}
-      options=${[['', 'nenhum'], ...presets.map((p) => [p.name, `${p.name} (+${p.bonus})`]), ['__custom', 'personalizado…']]} />
+      options=${[['', 'nenhum'], ...presets.map((p) => ({ value: p.name, label: `${p.name} (+${p.bonus}${p.maxDex !== null && p.maxDex !== undefined ? `, Des +${p.maxDex}` : ''}${p.acp ? `, −${p.acp}` : ''})`, group: shield ? 'Escudos' : { light: 'Leves', medium: 'Médias', heavy: 'Pesadas' }[p.type] })), ['__custom', 'personalizado…']]} />
     ${it ? html`
       <div class="row wrap">
         <input type="text" value=${it.name} onInput=${(e) => set({ name: e.target.value })} />
@@ -217,3 +216,12 @@ function ItemEffects({ it, set, compact }) {
     </div>` : null}
   </div>`;
 }
+
+// search over the full weapon list ("kuk" → kukri), with damage, critical and proficiency
+export function WeaponPicker({ onPick, extra = [], placeholder = '+ Arma (digite: kukri, rapier, longbow…)' }) {
+  const items = [...WEAPONS.map((w) => ({ ...w, src: 'pf' })), ...extra];
+  const crit = (w) => `${w.critRange < 20 ? `${w.critRange}–20/` : ''}×${w.critMult}`;
+  return html`<${SearchPicker} items=${items} getText=${(w) => w.name} onPick=${onPick} limit=${40} requireQuery placeholder=${placeholder}
+    renderItem=${(w) => html`<span><b>${w.name}</b> <span class="small muted">${w.dice}${w.dice2 ? `/${w.dice2}` : ''} ${crit(w)}${w.range ? ` · ${w.range}` : ''}${w.dtype ? ` · ${w.dtype}` : ''}${w.special ? ` · ${w.special}` : ''}</span> <span class="src-badge">${w.groupLabel || weaponGroupLabel(w)}</span></span>`} />`;
+}
+

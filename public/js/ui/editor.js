@@ -10,9 +10,9 @@ import {
 import { TYPES, SUBTYPES, ELEMENTS, ELEMENT_PT, AFFINITIES, IMMUNITY_GROUPS, SENSES_COMMON, SYSTEMS, elementsFor, elementNamePT, PF_AFFINITIES } from '../rules/types.js';
 import { SKILLS, NPC_SKILL_SELECTIONS } from '../rules/skills.js';
 import { featEffect, featKey, effectFromText } from '../rules/featEffects.js';
-import { NATURAL_ATTACKS, WEAPONS, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
+import { NATURAL_ATTACKS, WEAPONS, weaponAttackFields, ABILITY_TEMPLATES, BURST_TEMPLATE, MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { exportMarkdown } from '../export.js';
-import { EquipmentSection } from './equipment.js';
+import { EquipmentSection, WeaponPicker } from './equipment.js';
 import { TalentsSection } from './talents.js';
 import { useAppearance } from './appearance.js';
 import { goneFeat, HOUSE_FEATS } from '../rules/houseRules.js';
@@ -509,7 +509,7 @@ function OffenseSection({ def, up, upIn, c }) {
     const p = WEAPONS.find((x) => x.name === name);
     if (!p) return;
     const a = newAttack(p.kind || 'melee', false);
-    Object.assign(a, { name: p.name, dice: scaleDiceForSize(p.dice, 'Medium', def.size), critRange: p.critRange, critMult: p.critMult, hands: p.hands || 'one', light: !!p.light, finesse: !!p.finesse, thrown: !!p.thrown, range: p.range || '' });
+    Object.assign(a, weaponAttackFields(p, (d) => scaleDiceForSize(d, 'Medium', def.size)));
     up({ attacks: [...def.attacks, a] });
   };
   const detail = Object.fromEntries(c.attackDetails.map((x) => [x.id, x.text]));
@@ -550,7 +550,7 @@ function OffenseSection({ def, up, upIn, c }) {
         <div class="attack-out">${detail[a.id] || ''}</div>
       </div>`} />
     <div class="row wrap">
-      <${Select} value="" onChange=${addWeapon} options=${[{ value: '', label: '+ Arma…' }, ...WEAPONS.map((w) => ({ value: w.name, label: `${w.name} (${w.dice})`, group: w.kind === 'ranged' ? 'À distância' : 'Corpo a corpo' }))]} />
+      <div class="weapon-pick"><${WeaponPicker} onPick=${(w) => addWeapon(w.name)} /></div>
       <${Select} value="" onChange=${addNatural} options=${[{ value: '', label: '+ Ataque natural…' }, ...NATURAL_ATTACKS.map((w) => ({ value: w.name, label: `${w.name} (${scaleDiceForSize(w.dice, 'Medium', def.size)}${w.primary ? '' : ', secundário'})` }))]} />
       <button class="btn small" onClick=${() => up({ attacks: [...def.attacks, newAttack('melee', false)] })}>+ Ataque vazio</button>
     </div>

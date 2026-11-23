@@ -557,3 +557,4 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 }
 @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
 .dg-canvas-wrap canvas:not(.tool-select) { touch-action: none; }
+.weapon-pick { flex: 1 1 320px; min-width: 0; max-width: 520px; }

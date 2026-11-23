@@ -53,6 +53,29 @@ export const WEAPONS = [
   { name: 'chakram', dice: '1d8', critRange: 20, critMult: 2, kind: 'ranged', thrown: true, range: '30 ft.' },
 ];
 
+// The full Pathfinder list (public/data/pf-weapons.json, from the Archives of Nethys) is merged in at start-up;
+// the entries above stay as the offline default and for FFd20-only names.
+const PROF_PT = { simple: 'Simples', martial: 'Marciais', exotic: 'Exóticas', firearm: 'Armas de fogo' };
+export function loadWeaponList(list) {
+  const byName = new Map(WEAPONS.map((w) => [w.name, w]));
+  for (const w of list || []) {
+    byName.set(w.name, {
+      name: w.name, dice: String(w.dice).split('/')[0], dice2: String(w.dice).includes('/') ? String(w.dice).split('/')[1] : '',
+      critRange: w.critRange, critMult: w.critMult, light: !!w.light, hands: w.hands, kind: w.kind, range: w.range || '',
+      finesse: !!w.finesse, thrown: !!w.thrown, thrownOk: !!w.thrownOk, reach: !!w.reach, price: w.price || 0,
+      prof: w.prof, dtype: w.dtype || '', special: w.special || '', weight: w.weight || '',
+    });
+  }
+  WEAPONS.splice(0, WEAPONS.length, ...[...byName.values()].sort((a, b) => a.name.localeCompare(b.name)));
+}
+export const weaponGroupLabel = (w) => PROF_PT[w.prof] || (w.kind === 'ranged' ? 'À distância' : 'Corpo a corpo');
+// attack fields for a weapon preset (size-scaled damage dice)
+export function weaponAttackFields(p, scale) {
+  return { name: p.name, kind: p.kind || 'melee', dice: scale(p.dice), critRange: p.critRange, critMult: p.critMult, hands: p.hands || 'one', light: !!p.light,
+    finesse: !!p.finesse, thrown: !!p.thrown, range: p.range || '', basePrice: p.price || 0, weight: parseFloat(p.weight) || 0 };
+}
+
+
 // Universal monster rules / FFd20 UMR templates. {placeholders} are filled by the engine:
 // {hd} {dcCon} {dcCha} {dcWis} {dcMental} {cl} {burstUses} {burstDuration} {bombRadius}
 export const ABILITY_TEMPLATES = [

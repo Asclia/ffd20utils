@@ -20,6 +20,20 @@ export const SHIELDS = [
   ['heavy wooden shield', 2, null, 2, 7], ['heavy steel shield', 2, null, 2, 20], ['tower shield', 4, 2, 10, 30],
 ].map(([name, bonus, maxDex, acp, price]) => ({ name, bonus, maxDex, acp, price }));
 
+// The full Pathfinder armor and shield lists (public/data/pf-armor.json, from the Archives of Nethys) merged in at start-up.
+export function loadArmorList(list) {
+  const merge = (arr, items) => {
+    const byName = new Map(arr.map((x) => [x.name, x]));
+    for (const x of items) byName.set(x.name, { ...byName.get(x.name), ...x });
+    arr.splice(0, arr.length, ...[...byName.values()]);
+  };
+  const order = { light: 0, medium: 1, heavy: 2 };
+  merge(ARMORS, (list || []).filter((x) => x.type !== 'shield').map(({ name, type, bonus, maxDex, acp, asf, price }) => ({ name, type, bonus, maxDex: maxDex ?? null, acp, asf, price })));
+  ARMORS.sort((a, b) => order[a.type] - order[b.type] || a.bonus - b.bonus || a.name.localeCompare(b.name));
+  merge(SHIELDS, (list || []).filter((x) => x.type === 'shield').map(({ name, bonus, maxDex, acp, asf, price }) => ({ name, bonus, maxDex: maxDex ?? null, acp, asf, price })));
+  SHIELDS.sort((a, b) => a.bonus - b.bonus || a.name.localeCompare(b.name));
+}
+
 // Classic PF1e magic items (used by FFd20's own iconics, e.g. Fran: Belt of Incredible Dexterity, Ring of Protection).
 const ABIL_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
 export function classicItems() {
@@ -170,6 +184,36 @@ export const WEAPON_MATERIALS = {
   mithral: { name: 'mithral', cost: (a) => (a.light ? 1000 : a.hands === 'two' ? 4000 : 2000), mw: true, note: 'Metade do peso; conta como prata (sem o −1 no dano).' },
   darkwood: { name: 'darkwood', cost: (a) => (a.hands === 'two' ? 40 : 20), mw: true, note: 'Só armas de madeira; metade do peso.' },
   'living crystal': { name: 'living crystal', ff: true, cost: () => 1600, mw: true, rider: (a) => `${1 + (Number(a.enhancement) || 0)} bleed`, note: 'Sangramento 1 (+1 por bônus de melhoria); vence RD/crystal.' },
+  // Ultimate Equipment and other books (aonprd.com/SpecialMaterials.aspx); a.basePrice = price of the normal weapon, a.weight in lb.
+  'blood crystal': { name: 'blood crystal', cost: () => 1500, note: '+1 de dano contra alvos sangrando (perfurantes/cortantes); metade dos PV da arma.' },
+  bronze: { name: 'bronze', note: 'Mesmo custo e dano do aço; frágil (fragile).' },
+  bone: { name: 'bone', cost: (a) => -(Number(a.basePrice) || 0) / 2, dmg: -2, fragile: true, note: 'Metade do preço; −2 no dano (mín. 1); frágil.' },
+  blackwood: { name: 'blackwood', mw: true, cost: (a) => 20 * (Number(a.weight) || 0), note: 'Só armas de madeira; obra-prima; +20 gil/lb; ignora RD contra criaturas da água.' },
+  cryptstone: { name: 'cryptstone', mw: true, cost: () => 500, note: 'Só armas de concussão; +1 no dano contra mortos-vivos; afeta mortos-vivos incorpóreos.', vs: '+1 damage vs. undead' },
+  'elysian bronze': { name: 'Elysian bronze', cost: () => 1000, note: '+1 no dano contra bestas mágicas e humanoides monstruosos.', vs: '+1 damage vs. magical beasts and monstrous humanoids' },
+  'fire-forged steel': { name: 'fire-forged steel', mw: true, cost: () => 600, note: 'Após sofrer 10+ de fogo: +1d4 de fogo por 2 rodadas (1d6 por 4 com armadura fire-forged).' },
+  'frost-forged steel': { name: 'frost-forged steel', mw: true, cost: () => 600, note: 'Após sofrer 10+ de frio: +1d4 de frio por 2 rodadas (1d6 por 4 com armadura frost-forged).' },
+  glass: { name: 'glass', cost: (a) => -(Number(a.basePrice) || 0) / 2, fragile: true, note: 'Metade do preço; só leves/de uma mão perfurantes ou cortantes; frágil.' },
+  gold: { name: 'gold', cost: (a) => 9 * (Number(a.basePrice) || 0), dmg: -2, fragile: true, note: '10× o preço; −2 no dano; frágil (só armas leves perfurantes/cortantes).' },
+  greenwood: { name: 'greenwood', mw: true, cost: (a) => 50 * (Number(a.weight) || 0), note: 'Só armas de madeira; obra-prima; +50 gil/lb; sofre ¼ do dano de fogo.' },
+  horacalcum: { name: 'horacalcum', mw: true, cost: () => 6000, atk: 1, note: '+1 de circunstância no ataque.' },
+  inubrix: { name: 'inubrix', cost: () => 5000, note: 'Dano como uma categoria menor; sempre "broken"; ignora CA de armaduras/escudos de ferro ou aço.' },
+  'liquid glass': { name: 'liquid glass', cost: () => 800, dmg: 1, note: '+1 no dano enquanto estiver com os PV cheios; se regenera.' },
+  'living steel': { name: 'living steel', cost: () => 500, note: 'Se regenera 2 PV/dia.' },
+  'nexavaran steel': { name: 'nexavaran steel', cost: (a) => (Number(a.basePrice) || 0) / 2 + (Number(a.enhancement) || (a.specials || []).length ? 3000 : 0), note: 'Conta como cold iron; ×1,5 o preço; +3.000 ao encantar.' },
+  noqual: { name: 'noqual', cost: () => 0, note: '+4 em saves contra magia; +1 no dano contra constructos e mortos-vivos criados por magia; +5.000 ao encantar.' },
+  obsidian: { name: 'obsidian', cost: (a) => -(Number(a.basePrice) || 0) / 2, fragile: true, note: 'Metade do preço; só leves/de uma mão perfurantes ou cortantes; frágil.' },
+  'pyre steel': { name: 'pyre steel', cost: (a) => Number(a.basePrice) || 0, note: 'Custo base dobrado; resistência a fogo 10; metade dos PV.' },
+  'siccatite (hot)': { name: 'siccatite', label: 'hot siccatite', cost: () => 1000, rider: () => '1 fire', note: '+1 de fogo por acerto; causa 1 de fogo no portador a cada rodada em combate.' },
+  'siccatite (cold)': { name: 'siccatite', label: 'cold siccatite', cost: () => 1000, rider: () => '1 cold', note: '+1 de frio por acerto; causa 1 de frio no portador a cada rodada em combate.' },
+  'singing steel': { name: 'singing steel', mw: true, cost: () => 6000, dmg: -1, note: 'Conta como prata alquímica (−1 no dano).' },
+  spiresteel: { name: 'spiresteel', mw: true, cost: () => 2000, note: 'No crítico: Vontade (CD 10 + 2× bônus de melhoria) ou fica staggered 1 rodada.' },
+  stone: { name: 'stone', cost: (a) => -0.75 * (Number(a.basePrice) || 0), fragile: true, note: '¼ do preço; frágil.' },
+  sunsilver: { name: 'sunsilver', mw: true, cost: (a) => 25 * (Number(a.weight) || 0), note: 'Conta como prata alquímica; obra-prima; +25 gil/lb.' },
+  viridium: { name: 'viridium', cost: () => 200, fragile: true, note: 'Frágil (+1.000 para fortalecer); envenenamentos com a arma ficam mais fortes.' },
+  voidglass: { name: 'voidglass', cost: () => 1000, dmg: 1, note: '+1 no dano (só perfurantes/cortantes).' },
+  whipwood: { name: 'whipwood', cost: () => 500, note: '+2 na CMD contra sunder da arma.' },
+
   'elemental crystal': { name: 'elemental crystal', ff: true, cost: () => 8300, mw: true, element: true, rider: (a) => `1d6${Number(a.enhancement) ? `+${Number(a.enhancement)}` : ''} ${a.materialElement || 'fire'}`, note: '+1d6 do elemento (+1 por bônus de melhoria); vence RD/crystal.' },
 };
 export const ARMOR_MATERIALS = {
@@ -179,6 +223,27 @@ export const ARMOR_MATERIALS = {
   dragonhide: { name: 'dragonhide', cost: (t, it) => Number(it.price) || 0, mw: true, note: 'Custo base dobrado; obra-prima.' },
   darkwood: { name: 'darkwood', cost: () => 50, mw: true, acp: 2, shieldOnly: true, note: 'Escudos de madeira: penalidade −2.' },
   'living crystal': { name: 'living crystal', ff: true, cost: () => 1300, mw: true, note: 'Obra-prima; dureza ×1,5.' },
+  // Ultimate Equipment and other books; t = light | medium | heavy | shield
+  angelskin: { name: 'angelskin', mw: true, cost: (t) => ({ light: 1000, medium: 2000 }[t] || 1000), note: 'Só couro/gibão/couro batido; reduz auras malignas em 10 DV.' },
+  'darkleaf cloth': { name: 'darkleaf cloth', mw: true, cost: (t) => ({ light: 750, medium: 1500, shield: 375 }[t] || 750), maxDex: 2, acp: 3, asf: -10, note: 'Des máx. +2, penalidade −3, falha arcana −10%; metade do peso.' },
+  'eel hide': { name: 'eel hide', mw: true, cost: (t) => ({ light: 1200, medium: 1800 }[t] || 1200), maxDex: 1, acp: 1, resistFixed: ['electricity', 2], note: 'Des máx. +1, penalidade −1, resistência a eletricidade 2.' },
+  'elysian bronze': { name: 'Elysian bronze', cost: (t) => ({ light: 1000, medium: 2000, heavy: 3000 }[t] || 1000), note: 'RD 1/2/3 (leve/média/pesada) contra armas naturais de bestas mágicas e humanoides monstruosos.' },
+  'fire-forged steel': { name: 'fire-forged steel', mw: true, cost: (t) => ({ light: 1000, medium: 2500, heavy: 3000 }[t] || 1000), resistFixed: ['fire', 2], note: 'Resistência a fogo 2.' },
+  'frost-forged steel': { name: 'frost-forged steel', mw: true, cost: (t) => ({ light: 1000, medium: 2500, heavy: 3000 }[t] || 1000), resistFixed: ['cold', 2], note: 'Resistência a frio 2.' },
+  bronze: { name: 'bronze', note: 'Mesmo custo; frágil; dureza 9.' },
+  bone: { name: 'bone', cost: (t, it) => -(Number(it.price) || 0) / 2, note: 'Metade do preço; dureza 5; frágil.' },
+  gold: { name: 'gold', cost: (t, it) => 9 * (Number(it.price) || 0), acBonus: -2, acp: -2, note: '10× o preço; −2 no bônus de armadura e +2 na penalidade.' },
+  'griffon mane': { name: 'griffon mane', cost: () => 200, note: 'Só acolchoada; +2 de competência em Fly.' },
+  'heatstone plating': { name: 'heatstone plating', cost: (t) => ({ light: 800, medium: 1000 }[t] || 800), note: 'Protege do frio (endure elements); não em armaduras pesadas.' },
+  horacalcum: { name: 'horacalcum', mw: true, cost: (t) => ({ light: 10000, medium: 30000, heavy: 60000 }[t] || 10000), init: (t) => ({ light: 1, medium: 2, heavy: 3 }[t] || 0), note: '+1/+2/+3 na iniciativa (leve/média/pesada).' },
+  'living steel': { name: 'living steel', cost: (t) => ({ light: 500, medium: 1000, heavy: 1500, shield: 100 }[t] || 500), note: 'Se regenera; armas de metal que tiram 1 natural contra ela podem quebrar.' },
+  noqual: { name: 'noqual', lighter: true, maxDex: 2, acp: 3, note: 'Uma categoria mais leve, Des máx. +2, penalidade −3, falha de magia +20% para qualquer conjuração.' },
+  'siccatite (hot)': { name: 'siccatite', label: 'hot siccatite', cost: () => 6000, resistFixed: ['cold', 5], note: 'Resistência a frio 5; causa 1 de fogo por rodada no usuário.' },
+  'siccatite (cold)': { name: 'siccatite', label: 'cold siccatite', cost: () => 6000, resistFixed: ['fire', 5], note: 'Resistência a fogo 5; causa 1 de frio por rodada no usuário.' },
+  'singing steel': { name: 'singing steel', mw: true, cost: (t) => ({ light: 750, medium: 9000, heavy: 12000, shield: 7000 }[t] || 750), lighter: true, maxDex: 1, acp: 1, asf: -5, note: 'Uma categoria mais leve, Des máx. +1, penalidade −1, falha arcana −5%.' },
+  spiresteel: { name: 'spiresteel', mw: true, cost: (t) => ({ light: 1000, medium: 2000, heavy: 3000 }[t] || 1000), note: 'Metade do bônus de armadura vale contra incorpóreos.' },
+  voidglass: { name: 'voidglass', cost: (t) => ({ light: 1000, medium: 2000, heavy: 4500, shield: 3000 }[t] || 1000), note: '+1/+2/+3 de resistência em saves contra magia de efeito mental.' },
+
   'elemental crystal': { name: 'elemental crystal', ff: true, cost: (t) => ({ light: 24150, medium: 26150, heavy: 30150, shield: 24150 }[t] || 24150), mw: true, element: true, resist: (it) => 5 + 5 * (Number(it.enh) || 0), note: 'Resistência 5 (+5 por bônus de melhoria) ao elemento.' },
 };
 export const armorKind = (it) => {
@@ -194,8 +259,8 @@ export function weaponPrice(a, specialsDB = []) {
   const base = Number(a.basePrice) || 0;
   const mat = WEAPON_MATERIALS[a.material || ''] || {};
   const matCost = mat.cost ? mat.cost(a) : 0;
-  if (!b && !a.masterwork && !mat.mw) return base + flat + matCost;
-  return base + (mat.mw ? 0 : 300) + 2000 * b * b + flat + matCost;
+  if (!b && !a.masterwork && !mat.mw) return Math.max(0, base + flat + matCost);
+  return Math.max(0, base + (mat.mw ? 0 : 300) + 2000 * b * b + flat + matCost);
 }
 export function armorPrice(it, specialsDB = []) {
   if (!it) return 0;
@@ -205,8 +270,8 @@ export function armorPrice(it, specialsDB = []) {
   const base = Number(it.price) || 0;
   const mat = ARMOR_MATERIALS[it.material || ''] || {};
   const matCost = mat.cost ? mat.cost(it.maxDex === null || it.maxDex === undefined || it.isShield ? 'shield' : armorKind(it), it) : 0;
-  if (!b && !it.masterwork && !mat.mw) return base + flat + matCost;
-  return base + (mat.mw ? 0 : 150) + 1000 * b * b + flat + matCost;
+  if (!b && !it.masterwork && !mat.mw) return Math.max(0, base + flat + matCost);
+  return Math.max(0, base + (mat.mw ? 0 : 150) + 1000 * b * b + flat + matCost);
 }
 
 export const itemLabel = (prefix, name, specials) => `${prefix ? `+${prefix} ` : ''}${(specials || []).map((s) => s.toLowerCase()).join(' ')}${specials?.length ? ' ' : ''}${name}`;
@@ -232,7 +297,7 @@ export function gearSummary(d, db) {
   for (const k of ['armor', 'shield']) {
     const it = eq[k];
     if (!it || !it.name) continue;
-    const matA = it.material ? `${ARMOR_MATERIALS[it.material]?.name || it.material} ` : '';
+    const matA = it.material ? `${ARMOR_MATERIALS[it.material]?.label || ARMOR_MATERIALS[it.material]?.name || it.material} ` : '';
     other.push(itemLabel(Number(it.enh) || 0, `${it.masterwork && !Number(it.enh) && !ARMOR_MATERIALS[it.material || '']?.mw ? 'masterwork ' : ''}${matA}${it.name}`, it.specials));
     total += armorPrice({ ...it, isShield: k === 'shield' }, items.armorSpecials);
   }

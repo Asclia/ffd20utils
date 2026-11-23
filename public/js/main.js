@@ -12,6 +12,8 @@ import { AppearanceDialog } from './ui/appearance.js';
 import { debounce, deepClone } from './util.js';
 import { SUBTYPE_BY_ID } from './rules/types.js';
 import { canonicalFeatName } from './rules/featEffects.js';
+import { loadWeaponList } from './rules/presets.js';
+import { loadArmorList } from './rules/equipment.js';
 
 const TABS = [
   ['bestiary', 'Bestiário', '📖'],
@@ -33,9 +35,11 @@ const Emblem = () => html`<svg viewBox="0 0 64 64" aria-hidden="true">
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [ffClasses, featsRaw, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes, pfTalents, pfPaths, pfSpellInfo] = await Promise.all(
+  const [ffClasses, featsRaw, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes, pfTalents, pfPaths, pfSpellInfo, pfWeapons, pfArmor] = await Promise.all(
     ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json',
-      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json', 'pf-talents.json', 'pf-paths.json', 'pf-spell-info.json'].map(get));
+      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json', 'pf-talents.json', 'pf-paths.json', 'pf-spell-info.json', 'pf-weapons.json', 'pf-armor.json'].map(get));
+  loadWeaponList(pfWeapons);
+  loadArmorList(pfArmor);
   const archetypes = [...ffArchetypes, ...pfArchetypes];
   const feats = featsRaw.map((f) => ({ ...f, name: canonicalFeatName(f.name) })); // "Weapon Focus, Greater" → "Greater Weapon Focus"
   // Pathfinder subtypes not already defined with rules in types.js

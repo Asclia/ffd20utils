@@ -479,14 +479,16 @@ export function compute(def, db) {
   // equipped armor & shield (Equipment section): base bonus + enhancement; masterwork/magic reduce ACP by 1
   for (const [k, it] of [['armor', eq.armor], ['shield', eq.shield]]) {
     if (!it || !it.name) continue;
-    const b = (Number(it.bonus) || 0) + (Number(it.enh) || 0);
+    const mat = ARMOR_MATERIALS[it.material || ''] || {};
+    const b = Math.max(0, (Number(it.bonus) || 0) + (Number(it.enh) || 0) + (mat.acBonus || 0));
     if (k === 'armor') armorBonus = Math.max(armorBonus, b);
     else shieldBonus = Math.max(shieldBonus, b);
-    const mat = ARMOR_MATERIALS[it.material || ''] || {};
     if (it.maxDex !== '' && it.maxDex !== null && it.maxDex !== undefined) maxDex = Math.min(maxDex, Number(it.maxDex) + (mat.maxDex || 0));
     acp += Math.max(0, (Number(it.acp) || 0) - (it.masterwork || Number(it.enh) || mat.mw ? 1 : 0) - (mat.acp || 0));
     if (mat.dr) { const n = mat.dr(k === 'shield' ? 'shield' : armorType); if (n) addMod({ target: 'dr', value: n, type: 'adamantine', source: `${mat.name} ${it.name}` }); }
     if (mat.resist) materialResist.push([it.materialElement || EL[0], mat.resist(it)]);
+    if (mat.resistFixed) materialResist.push([pf ? mat.resistFixed[0] : (Object.entries(FF_TO_PF).find(([, v]) => v === mat.resistFixed[0]) || [mat.resistFixed[0]])[0], mat.resistFixed[1]]);
+    if (mat.init) { const n = mat.init(k === 'shield' ? 'shield' : armorType); if (n) addMod({ target: 'init', value: n, type: 'untyped', source: `${mat.name} ${it.name}` }); }
   }
   // armor training and similar: higher max Dex and lower armor check penalty while wearing armor
   if (armorType !== 'none') {
@@ -594,7 +596,7 @@ export function compute(def, db) {
         let dmgAbil = dmgMult === 0 ? 0 : (dmgAbilScore < 0 ? dmgAbilScore : Math.floor(dmgAbilScore * dmgMult));
         const ax = { ...a, _dmgMult: dmgMult, ...(house?.weaponGroups && !a.natural ? { weaponGroup: weaponGroup(a.name) } : {}) };
         const wmat = a.natural ? {} : (WEAPON_MATERIALS[a.material || ''] || {});
-        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + ((a.masterwork || wmat.mw) && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
+        let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + (wmat.atk || 0) + ((a.masterwork || wmat.mw) && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
         let dmg = dmgAbil + (wmat.dmg || 0) + (Number(a.enhancement) || 0) + (Number(a.damageBonus) || 0) + dmgMods + (kind === 'melee' ? dmgMelee : dmgRanged);
         let critRange = Number(a.critRange) || 20;
         // keen (and similar) magic weapon abilities double the threat range; speed adds an attack

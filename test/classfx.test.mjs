@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { compute, newCreature, newAttack } from '../public/js/rules/engine.js';
 import { buildStatblock, statblockMarkdown } from '../public/js/rules/statblock.js';
+import { WEAPONS, loadWeaponList, weaponAttackFields } from '../public/js/rules/presets.js';
+import { loadArmorList, ARMORS, weaponPrice, armorPrice } from '../public/js/rules/equipment.js';
 
 const load = (f) => JSON.parse(readFileSync(new URL(`../public/data/${f}`, import.meta.url)));
 const ff = load('classes.json').map((c) => ({ ...c, system: 'ffd20' }));
@@ -343,6 +345,41 @@ t('archetype swaps: eldritch scoundrel (unchained rogue) has no uncanny dodge or
   d.classes[0].archetypes = ['pf-rogue--scroll-scoundrel'];
   const gone = compute(d, db).classFeatureList.filter((f) => f.replacedBy).map((f) => f.name.toLowerCase());
   for (const n of ['uncanny dodge', 'improved uncanny dodge', 'danger sense']) assert.ok(gone.includes(n), n);
+});
+
+t('full PF weapon/armor lists and special materials', () => {
+  loadWeaponList(load('pf-weapons.json'));
+  loadArmorList(load('pf-armor.json'));
+  assert.ok(WEAPONS.length > 300 && ARMORS.length > 40);
+  const k = WEAPONS.find((w) => w.name === 'kukri');
+  assert.deepEqual([k.dice, k.critRange, k.critMult, k.light, k.finesse, k.price], ['1d4', 18, 2, true, true, 8]);
+  for (const n of ['katana', 'longsword', 'shortbow', 'heavy crossbow', 'chakram', 'whip', 'tri-bladed katar', 'shuriken', 'dwarven urgrosh']) assert.ok(WEAPONS.some((w) => w.name === n), n);
+  const d = npc('pf1e', 'pf-rogue', 5);
+  d.abilities.dex = 16;
+  d.feats = [{ id: 'f', name: 'Weapon Finesse', param: '', bonus: false }];
+  const a = { ...newAttack('melee', false), ...weaponAttackFields(k, (x) => x), id: 'k1' };
+  d.attacks = [a];
+  let c = compute(d, db);
+  assert.match(c.attacks.melee[0], /kukri \+6 \(1d4\+3\/18–20\)/); // BAB 3 + Dex 3 (finesse); Str 16 (human +2)
+  a.material = 'horacalcum';
+  c = compute(d, db);
+  assert.match(c.attacks.melee[0], /horacalcum kukri \+8/); // masterwork +1, circumstance +1
+  assert.equal(weaponPrice(a), 8 + 6000);
+  a.material = 'bone';
+  assert.match(compute(d, db).attacks.melee[0], /bone kukri \+6 \(1d4\+1\//); // +3 −2
+  assert.equal(weaponPrice(a), 4);
+  a.material = 'siccatite (hot)';
+  assert.match(compute(d, db).attacks.melee[0], /plus 1 fire/);
+  // armor: eel hide studded leather → elec resist 2, max Dex +1; horacalcum full plate → +3 init
+  d.attacks = [];
+  const sl = ARMORS.find((x) => x.name === 'studded leather');
+  d.equipment.armor = { ...sl, enh: 0, specials: [], material: 'eel hide' };
+  c = compute(d, db);
+  assert.match(md(d, c), /Resist\W* electricity 2/i);
+  assert.equal(armorPrice(d.equipment.armor), 25 + 1200);
+  const fp = ARMORS.find((x) => x.name === 'full plate');
+  d.equipment.armor = { ...fp, enh: 0, specials: [], material: 'horacalcum' };
+  assert.equal(compute(d, db).init, 3 + 3);
 });
 
 console.log(`${passed} class-effect tests passed`);
