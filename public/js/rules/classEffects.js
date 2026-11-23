@@ -215,6 +215,34 @@ export const CLASS_EFFECTS = {
   'shield block': { note: 'Bônus contra um oponente designado.' },
 };
 
+// ------------------------------------------------------------------ statblock text with computed uses/DCs (PF style)
+const pos = (n) => Math.max(0, n);
+const SHORTS = {
+  'channel energy': (x) => `channel energy (${pos(3 + x.m.cha)}/day, DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${x.vText || `${Math.ceil(x.L / 2)}d6`})`,
+  'channel positive energy': (x) => `channel positive energy (DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${Math.floor(x.L / 2)}d6)`,
+  'channel negative energy': (x) => `channel negative energy (DC ${10 + Math.floor(x.L / 2) + x.m.cha}, ${Math.floor(x.L / 2)}d6)`,
+  'lay on hands': (x) => `lay on hands (${pos(Math.floor(x.L / 2) + x.m.cha)}/day, ${x.ff ? (x.vText || `${Math.ceil(x.L / 2)}d6`) : `${Math.floor(x.L / 2)}d6`})`,
+  'touch of corruption': (x) => `touch of corruption (${pos(Math.floor(x.L / 2) + x.m.cha)}/day, ${Math.floor(x.L / 2)}d6)`,
+  rage: (x) => `rage (${4 + x.m.con + 2 * (x.L - 1)} rounds/day)`,
+  bloodrage: (x) => `bloodrage (${4 + x.m.con + 2 * (x.L - 1)} rounds/day)`,
+  'raging song': (x) => `raging song (${3 + x.m.cha + 2 * (x.L - 1)} rounds/day)`,
+  'bardic performance': (x) => `bardic performance (${4 + x.m.cha + 2 * (x.L - 1)} rounds/day)`,
+  'defensive stance': (x) => `defensive stance (${4 + x.m.con + 2 * (x.L - 1)} rounds/day)`,
+  'ki pool': (x) => `ki pool (${pos(Math.floor(x.L / 2) + x.m.wis)} points${x.value && /\(/.test(x.value) ? `, ${x.value.match(/\(([^)]*)\)/)[1]}` : ''})`,
+  'arcane pool': (x) => `arcane pool (${pos(Math.floor(x.L / 2) + x.m.int)} points)`,
+  grit: (x) => `grit (${pos(x.m.wis)})`,
+  panache: (x) => `panache (${pos(x.m.cha)})`,
+  bomb: (x) => `bomb ${x.L + x.m.int}/day (${Math.ceil(x.L / 2)}d6+${x.m.int} fire, DC ${10 + Math.floor(x.L / 2) + x.m.int})`,
+  'stunning fist': (x) => `stunning fist (${x.L}/day, DC ${10 + Math.floor(x.L / 2) + x.m.wis})`,
+  'smite evil': (x) => `smite evil (${1 + Math.floor((x.L - 1) / 3)}/day)`,
+  'smite good': (x) => `smite good (${1 + Math.floor((x.L - 1) / 3)}/day)`,
+  'wild shape': (x) => (x.value ? `wild shape (${(x.value.match(/\(([^)]*)\)/) || [, x.value])[1]})` : 'wild shape'),
+  judgment: (x) => `judgment ${1 + Math.floor((x.L - 1) / 3)}/day`,
+  'sneak attack': (x) => `sneak attack +${x.ff ? '' : ''}${(x.vText && /d6/.test(x.vText) ? x.vText.replace(/^\+/, '') : `${Math.ceil(x.L / 2)}d6`)}`,
+  'studied target': (x) => `studied target +${1 + Math.floor(x.L / 5)}`,
+  'arcane bond': () => 'arcane bond',
+};
+
 const ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
 export function parseFeatureValue(text) {
   const s = String(text || '');
@@ -280,9 +308,13 @@ export function archetypeClassSkills(activeFeatures, skillNames) {
 
 // Applies every active class feature that has a numeric effect.
 export function applyClassEffects({ features, stage, x0, toggles }) {
-  const res = { mods: [], hooks: [], immune: [], flags: {}, toggles: [], notes: {} };
+  const res = { mods: [], hooks: [], immune: [], flags: {}, toggles: [], notes: {}, shorts: {} };
   for (const { cls, f, L, value } of features) {
     const key = effectKey(f.name);
+    if (stage === 'rest' && SHORTS[key]) {
+      const vt = (String(value || '').match(/(\d+d\d+)/) || [])[1] || '';
+      try { res.shorts[`${cls.id}:${f.name}`] = SHORTS[key]({ ...x0, L, cls, value, vText: vt }); } catch { /* ignore */ }
+    }
     const eff = CLASS_EFFECTS[key];
     if (!eff || !eff.fn) continue;
     if ((eff.stage || 'rest') !== stage) continue;

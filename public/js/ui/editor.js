@@ -15,7 +15,7 @@ import { EquipmentSection } from './equipment.js';
 import { TalentsSection } from './talents.js';
 import { useAppearance } from './appearance.js';
 import { goneFeat, HOUSE_FEATS } from '../rules/houseRules.js';
-import { autoBuild, detectRole, ROLES, PARTS, mainClass } from '../rules/autobuild.js';
+import { autoBuild, detectRole, ROLES, PARTS, mainClass, buildAbilities } from '../rules/autobuild.js';
 
 const PLACEMENTS = [['specialAttack', 'Special Attacks'], ['specialAbility', 'Special Abilities (linha)'], ['defensive', 'Defensive Abilities'], ['sq', 'SQ'], ['aura', 'Aura'], ['hidden', 'Só descrição / oculto']];
 const KINDS = [['Ex', 'Ex'], ['Su', 'Su'], ['Sp', 'Sp'], ['', '—']];
@@ -210,7 +210,9 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
   const allClasses = [...db.classes.filter((x) => (x.system || 'ffd20') === sys), ...(homebrew.classes || []).map((x) => ({ ...x, category: 'homebrew' }))];
   const opts = allClasses.map((x) => ({ value: x.id, label: x.name, group: CAT_PT[x.category] || x.category }));
   const add = () => up({ classes: [...def.classes, { id: uid(), classId: sys === 'pf1e' ? 'pf-fighter' : 'warrior', level: 1 }] });
-  return html`<${Section} title=${npc ? 'Classes e CR' : 'Níveis de classe (opcional)'} id="classes" badge=${c.classLevels ? `${c.classLevels} níveis` : ''} open=${npc}>
+  return html`<${Section} title=${npc ? 'Classes e CR' : 'Níveis de classe'} id="classes" badge=${c.classLevels ? `${c.classLevels} níveis` : ''} open=${npc || def.classes.length > 0}>
+    ${npc ? null : html`<div class="muted small">Monstros com níveis de classe (ex.: um outsider guerreiro): os níveis somam aos HD raciais — BAB, saves, PV, perícias, feats, magias e características de classe entram sozinhos.
+      O CR sobe +1 por nível de <b>classe-chave</b> (que combina com o monstro) e +1 a cada 2 níveis nas outras.</div>`}
     <${ListEditor} items=${def.classes} onChange=${(v) => up({ classes: v })} addLabel="+ Classe" onAdd=${add}
       empty=${npc ? 'Adicione ao menos uma classe.' : 'Monstros normalmente não têm classes; adicione se quiser um monstro com níveis de classe.'}
       render=${(it, set) => {
@@ -221,6 +223,7 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
         return html`<div><div class="row wrap">
           <${Select} value=${it.classId} onChange=${(v) => set({ classId: v })} options=${opts} />
           <label class="inline">Nível <${Num} value=${it.level} min=${1} max=${cd?.maxLevel || 20} onInput=${(v) => set({ level: Math.max(1, Math.min(cd?.maxLevel || 20, v || 1)) })} /></label>
+          ${!npc ? html`<${Check} label="classe-chave" checked=${it.key !== false} onChange=${(v) => set({ key: v })} title="Classe que combina com as habilidades do monstro: +1 CR por nível (senão +1 a cada 2 níveis)" />` : null}
           ${cd ? html`<span class="muted small">d${cd.hd} · BAB ${cd.babProgression} · ${cd.skillPoints}+Int · ${cd.kind === 'basic' ? 'NPC (básica)' : 'heroica'}${cd.caster ? ` · conjurador (${(cd.castingAbility || '?').toUpperCase()})` : ''} ${cd.source ? html`· <a href=${cd.source} target="_blank" rel="noopener">página ↗</a>` : null}</span>` : null}
         </div>
         ${archList.length ? html`<div class="row wrap arch-row">
@@ -234,6 +237,7 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
           ${a.features.map((f) => html`<p><b>${f.name}</b>${f.type ? ` (${f.type})` : ''} <small>nv ${f.level}${f.replaces.length ? ` · substitui: ${f.replaces.join(', ')}` : ''}</small></p>`)}
         </details>`)}
         ${overlaps.length ? html`<div class="small warn">Arquétipos incompatíveis: ambos substituem ${overlaps.join(', ')}.</div>` : null}` : null}
+        <${PathPicker} it=${it} set=${set} db=${db} />
         </div>`;
       }} />
     <div class="grid">
@@ -246,7 +250,8 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
           <div class="row"><b class="big">${crLabel(c.cr)}</b>
           <${Select} value=${def.crOverride ?? ''} onChange=${(v) => up({ crOverride: v === '' ? null : Number(v) })} options=${[['', 'automático'], ...CR_LIST.map((x) => [x, `forçar ${crLabel(x)}`])]} /></div>
         </${Field}>` : html`
-        <${Field} label="Limit Breaks"><${Check} label="Usa Limit Breaks das classes" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
+        ${def.system === 'pf1e' ? null : html`<${Field} label="Limit Breaks"><${Check} label="Usa Limit Breaks das classes" checked=${def.limitBreaksEnabled} onChange=${(v) => up({ limitBreaksEnabled: v })} /></${Field}>`}
+        ${c.crFromClasses ? html`<${Field} label="CR com os níveis"><div class="row"><b class="big">${crLabel(c.cr)}</b><span class="muted small">CR base ${crLabel(c.crBase)} + ${c.crFromClasses} pelos níveis de classe</span></div></${Field}>` : null}`}
     </div>
   </${Section}>`;
 }
@@ -318,7 +323,8 @@ function AutoBuildSection({ def, setDef, c, db, npc }) {
   const detected = detectRole(c);
   const role = def.autoRole && ROLES[def.autoRole] ? def.autoRole : '';
   const caster = c.classes.some((x) => x.def.caster);
-  const [parts, setParts] = useState(() => PARTS.map((p) => p[0]).filter((p) => npc || p !== 'equipment'));
+  // monsters keep their own ability scores and gear
+  const [parts, setParts] = useState(() => PARTS.map((p) => p[0]).filter((p) => npc || (p !== 'equipment' && p !== 'abilities')));
   const [seed, setSeed] = useState(1);
   const main = mainClass(c);
   const run = (opts = {}) => {
@@ -335,8 +341,8 @@ function AutoBuildSection({ def, setDef, c, db, npc }) {
   const reroll = () => { const s = seed + 1; setSeed(s); run({ seed: s, silent: true }); };
   const togglePart = (p, v) => setParts(v ? [...parts, p] : parts.filter((x) => x !== p));
   return html`<${Section} title="⚡ Montagem automática" id="autobuild" open=${npc}>
-    <div class="muted small">Preenche o ${npc ? 'NPC' : 'personagem'} a partir da raça, das classes e de um papel em combate, seguindo o guia de NPCs do FFd20
-      (arrays de atributos, +1 a cada 4 níveis, equipamento pela tabela de riqueza de NPC) e as regras do PF1e (feats com pré-requisitos, feats bônus de classe, magias por dia e conhecidas).</div>
+    <div class="muted small">Preenche ${npc ? 'o NPC' : 'os níveis de classe'} a partir da raça, das classes e de um papel em combate: arrays de NPC (heroico/básico), +1 a cada 4 níveis,
+      equipamento pela riqueza de NPC, feats com pré-requisitos e feats bônus de classe, ${def.system === 'pf1e' ? 'magias por dia/conhecidas do Pathfinder' : 'magias conhecidas do FFd20'}.</div>
     <div class="grid">
       <${Field} label="Papel" wide>
         <${Select} value=${role} onChange=${(v) => setDef((d) => ({ ...d, autoRole: v }))}
@@ -359,15 +365,39 @@ function AutoBuildSection({ def, setDef, c, db, npc }) {
   </${Section}>`;
 }
 
+// ------------------------------------------------------------------ domains, bloodlines, schools, mysteries, spirits (Pathfinder)
+const PATH_PT = { domain: ['Domínio', 'Domínios'], bloodline: ['Linhagem', 'Linhagens'], school: ['Escola arcana', 'Escolas'], mystery: ['Mistério', 'Mistérios'], spirit: ['Espírito', 'Espíritos'] };
+function PathPicker({ it, set, db }) {
+  const e = (db.pathsByClass || {})[it.classId];
+  if (!e) return null;
+  const chosen = it.paths || [];
+  const [one, many] = PATH_PT[e.kind] || ['Escolha', 'Escolhas'];
+  const pick = (i, id) => { const p = [...chosen]; p[i] = id; set({ paths: p.filter(Boolean) }); };
+  const opts = e.options;
+  return html`<div class="path-picker">
+    <div class="row wrap"><span class="small muted">${e.count > 1 ? many : one}:</span>
+      ${Array.from({ length: e.count }, (_, i) => html`<${Select} value=${chosen[i] || ''} onChange=${(v) => pick(i, v)}
+        options=${[['', `— escolher ${one.toLowerCase()} —`], ...opts.filter((o) => o.id === chosen[i] || !chosen.includes(o.id)).map((o) => [o.id, o.name])]} />`)}
+    </div>
+    ${chosen.map((id) => opts.find((o) => o.id === id)).filter(Boolean).map((o) => html`<details class="traits"><summary>${o.name}: ${o.powers.length} poder(es)${Object.keys(o.spells || {}).length ? `, ${Object.keys(o.spells).length} magia(s)` : ''} — <a href=${o.source} target="_blank" rel="noopener">página ↗</a></summary>
+      ${o.classSkills ? html`<p><b>Perícia de classe:</b> ${o.classSkills}</p>` : null}
+      ${o.bonusFeats ? html`<p><b>Feats bônus:</b> ${o.bonusFeats}</p>` : null}
+      ${o.powers.map((f) => html`<p><b>${f.name}</b>${f.type ? ` (${f.type})` : ''} <small>nv ${f.level}</small> — ${f.text}</p>`)}
+      ${Object.keys(o.spells || {}).length ? html`<p><b>Magias:</b> ${Object.entries(o.spells).map(([k, v]) => `${k}: ${v}`).join('; ')}</p>` : null}
+      <p class="muted small">Os poderes entram sozinhos em Características de classe conforme o nível; magias de domínio/linhagem entram na lista de magias do statblock.</p>
+    </details>`)}
+  </div>`;
+}
+
 // ------------------------------------------------------------------ abilities
 function AbilitiesSection({ def, up, upIn, c, npc }) {
   const race = c.race;
   const heroic = c.heroic || !c.classes.length;
-  const [role, setRole] = useState('melee');
-  const applyArray = (kind) => {
-    const arr = NPC_ARRAYS[role][kind];
-    up({ abilities: Object.fromEntries(ABILITIES.map((a, i) => [a, arr[i]])) });
-  };
+  // NPC arrays (heroic 15/14/13/12/10/8, basic 13/12/11/10/9/8) placed by the class role, with the racial +2 and
+  // the +1 every 4 levels going to the main ability
+  const [role, setRole] = useState('');
+  const useRole = role || detectRole(c);
+  const applyArray = (kind) => { up(buildAbilities(def, c, useRole, kind)); toast(`Array ${kind === 'heroic' ? 'heroico' : 'básico'} aplicado (${ROLES[useRole].label}).`); };
   const sizeBase = () => {
     const [s, dx, cn] = SIZE_DATA[def.size].base;
     up({ abilities: { ...def.abilities, str: s, dex: dx, con: cn } });
@@ -389,12 +419,12 @@ function AbilitiesSection({ def, up, upIn, c, npc }) {
       ${['con', 'int'].map((a) => html`<label class="inline">Sem ${ABILITY_NAMES[a]}: <${Select} value=${def.abilityNone?.[a] === null || def.abilityNone?.[a] === undefined ? 'auto' : def.abilityNone[a] ? 'yes' : 'no'}
         onChange=${(v) => upIn('abilityNone', { [a]: v === 'auto' ? null : v === 'yes' })} options=${[['auto', 'auto (pelo tipo)'], ['yes', 'sim (—)'], ['no', 'não']]} /></label>`)}
     </div>
-    ${npc ? html`<div class="row wrap"><span class="muted small">Arrays do FFd20:</span>
-      <${Select} value=${role} onChange=${setRole} options=${Object.entries(NPC_ARRAYS).map(([k, v]) => [k, v.label])} />
+    ${npc || c.classes.length ? html`<div class="row wrap"><span class="muted small">Arrays de NPC:</span>
+      <${Select} value=${role} onChange=${setRole} options=${[['', `Automático: ${ROLES[detectRole(c)].label}`], ...Object.entries(ROLES).map(([k, v]) => [k, v.label])]} />
       <button class="btn small ${heroic ? '' : 'ghost'}" onClick=${() => applyArray('heroic')}>Heroico (15/14/13/12/10/8)</button>
       <button class="btn small ${heroic ? 'ghost' : ''}" onClick=${() => applyArray('basic')}>Básico (13/12/11/10/9/8)</button>
-      <span class="muted small">+1 em um atributo a cada 4 níveis (use "Ajuste": ${Math.floor(c.hd / 4)} ponto(s)).</span></div>`
-    : html`<div class="row"><button class="btn small" onClick=${sizeBase}>Usar For/Des/Con base de ${SIZE_PT[def.size]} (${SIZE_DATA[def.size].base.join('/')})</button></div>`}
+      <span class="muted small">Distribui pelo papel, põe o +2 racial e +${Math.floor(c.hd / 4)} (1 a cada 4 HD) no atributo principal.</span></div>` : null}
+    ${npc ? null : html`<div class="row"><button class="btn small" onClick=${sizeBase}>Usar For/Des/Con base de ${SIZE_PT[def.size]} (${SIZE_DATA[def.size].base.join('/')})</button></div>`}
   </${Section}>`;
 }
 
@@ -534,6 +564,7 @@ function OffenseSection({ def, up, upIn, c }) {
 // ------------------------------------------------------------------ feats
 function FeatsSection({ def, up, c, db, homebrew }) {
   const house = c.houseRules;
+  const pf = def.system === 'pf1e';
   const all = useMemo(() => [...(homebrew.feats || []).map((f) => ({ ...f, source: 'Homebrew' })),
     ...(house ? HOUSE_FEATS.filter((f) => house[f.rule]) : []), ...db.feats], [db.feats, homebrew.feats, house]);
   const [srcFilter, setSrcFilter] = useState('');
@@ -604,11 +635,11 @@ function FeatsSection({ def, up, c, db, homebrew }) {
         </div>`;
       }} />
     <div class="row">
-      <${Select} value=${srcFilter} onChange=${setSrcFilter} options=${[['', 'Todas as fontes'], ['FFd20', 'FFd20'], ['Pathfinder', 'Pathfinder'], ['Homebrew', 'Homebrew']]} />
+      <${Select} value=${srcFilter} onChange=${setSrcFilter} options=${pf ? [['', 'Pathfinder + homebrew'], ['Pathfinder', 'Pathfinder'], ['Homebrew', 'Homebrew'], ['FFd20', 'FFd20 (outro sistema)']] : [['', 'Todas as fontes'], ['FFd20', 'FFd20'], ['Pathfinder', 'Pathfinder'], ['Homebrew', 'Homebrew']]} />
       <button class="btn small ghost" onClick=${addCustom}>+ feat personalizado</button>
     </div>
-    <${SearchPicker} items=${all} getText=${(f) => f.name} onPick=${add} placeholder="Buscar feat (FFd20, Pathfinder, homebrew)…"
-      filter=${(f) => (!srcFilter || f.source === srcFilter) && !goneFeat(house, f.name)}
+    <${SearchPicker} items=${all} getText=${(f) => f.name} onPick=${add} placeholder=${pf ? 'Buscar feat (Pathfinder, homebrew)…' : 'Buscar feat (FFd20, Pathfinder, homebrew)…'}
+      filter=${(f) => (srcFilter ? f.source === srcFilter : !(pf && f.source === 'FFd20')) && !goneFeat(house, f.name)}
       renderItem=${(f) => html`<span><b>${featEffect(f.name) ? '⚙ ' : ''}${f.name}</b> <span class="src-badge">${f.source}${f.category ? ` · ${f.category}` : ''}</span><br /><span class="small muted">${f.benefit?.slice(0, 160)}</span></span>`} />
   </${Section}>`;
 }
@@ -647,7 +678,7 @@ function SkillsSection({ def, up, c, npc }) {
       <input type="text" placeholder="Nova perícia (ex.: Perform (sing))" value=${newSkill} onInput=${(e) => setNewSkill(e.target.value)} />
       <button class="btn small" onClick=${() => { if (newSkill.trim()) { setRanks(newSkill.trim(), 1); setNewSkill(''); } }}>Adicionar</button>
     </div>
-    ${npc ? html`<div class="simple-box"><b>Método simplificado (FFd20):</b> escolha ${selections || '?'} perícias (seleções da classe + Int) na coluna S e aplique graduações = nível (${c.hd}).
+    ${npc && def.system !== 'pf1e' ? html`<div class="simple-box"><b>Método simplificado (FFd20):</b> escolha ${selections || '?'} perícias (seleções da classe + Int) na coluna S e aplique graduações = nível (${c.hd}).
       <button class="btn small" disabled=${!simple.length} onClick=${applySimple}>Aplicar a ${simple.length} perícia(s)</button></div>` : null}
   </${Section}>`;
 }
@@ -740,7 +771,8 @@ function AbilitiesListSection({ def, up, c, homebrew, db }) {
   const umrNames = new Set((db.umr || []).map((u) => u.name.toLowerCase()));
   const templates = [...(homebrew.abilities || []).map((a) => ({ ...a, group: 'Homebrew' })),
     ...(db.umr || []).map((u) => ({ ...u, group: u.source })),
-    ...ABILITY_TEMPLATES.filter((a) => !umrNames.has(a.name.toLowerCase())).map((a) => ({ ...a, group: 'FFd20' }))];
+    ...ABILITY_TEMPLATES.filter((a) => !umrNames.has(a.name.toLowerCase())).map((a) => ({ ...a, group: 'FFd20' }))]
+    .filter((t) => def.system !== 'pf1e' || t.group !== 'FFd20'); // Pathfinder creatures: no FFd20-only rules
   const addTemplate = (t) => {
     if (!t) return;
     if (t.placement === 'sense') return up({ senses: [...new Set([...(def.senses || []), t.short])] });
@@ -774,7 +806,7 @@ function AbilitiesListSection({ def, up, c, homebrew, db }) {
         <div class="muted small">O nome continua na linha de cima do statblock (Special Attacks, Defensive Abilities, SQ…).</div>
       </details>` : null;
     })()}
-    <div class="muted small">Universal Monster Rules do FFd20 e do Pathfinder (${templates.length}) — o texto já vem no formato do statblock e na linha certa; CDs viram {dcCon}/{dcMental} automaticamente.</div>
+    <div class="muted small">Universal Monster Rules ${def.system === 'pf1e' ? 'do Pathfinder' : 'do FFd20 e do Pathfinder'} (${templates.length}) — o texto já vem no formato do statblock e na linha certa; CDs viram {dcCon}/{dcMental} automaticamente.</div>
     <${SearchPicker} items=${templates} getText=${(t) => t.name} onPick=${addTemplate} limit=${80} placeholder="+ Buscar Universal Monster Rule (grab, pounce, breath weapon, drench…)"
       renderItem=${(t) => html`<span><b>${t.name}</b>${t.kind ? ` (${t.kind})` : ''} <span class="src-badge">${t.group}${t.location ? ` · ${t.location}` : ''}</span>${t.requires ? html` <span class="small warn">${t.requires}</span>` : null}
         <br /><span class="small muted">${(t.text || '').slice(0, 180)}</span></span>`} />

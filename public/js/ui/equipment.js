@@ -7,7 +7,7 @@ import { MOD_TARGETS, BONUS_TYPES } from '../rules/presets.js';
 import { SKILLS } from '../rules/skills.js';
 import {
   SLOTS, slotKind, ARMORS, SHIELDS, classicItems, makeItem, parseItemEffects, weaponPrice, armorPrice, gearSummary, emptyEquipment, specialBonus,
-  WEAPON_MATERIALS, ARMOR_MATERIALS,
+  WEAPON_MATERIALS, ARMOR_MATERIALS, specialsFor,
 } from '../rules/equipment.js';
 import { elementsFor, elementNamePT } from '../rules/types.js';
 
@@ -29,7 +29,10 @@ export function EquipmentSection({ def, up, c, db }) {
   const eq = def.equipment || emptyEquipment();
   const setEq = (patch) => up({ equipment: { ...eq, ...patch } });
   const items = db.items || {};
-  const allSlotItems = useMemo(() => [...(items.wondrous || []).map((x) => ({ ...x, source: 'FFd20' })), ...classicItems()], [items]);
+  const pf = def.system === 'pf1e';
+  const sp = specialsFor(def.system, items);
+  // Pathfinder creatures: no FFd20-only items (wondrous items, FF weapons and consumables)
+  const allSlotItems = useMemo(() => [...(pf ? [] : (items.wondrous || []).map((x) => ({ ...x, source: 'FFd20' }))), ...classicItems()], [items, pf]);
   const gs = gearSummary(def, db);
   const lvl = c.hd;
   const budget = def.mode === 'npc' ? (def.pcWealth ? PC_WEALTH[Math.min(20, lvl)] : npcGear(lvl, c.heroic)?.total) : null;
@@ -41,15 +44,15 @@ export function EquipmentSection({ def, up, c, db }) {
     <h4>Armas</h4>
     <${ListEditor} items=${weapons} empty="Nenhuma arma. Adicione abaixo (também aparecem em Ataque e Deslocamento)."
       onChange=${(list) => up({ attacks: [...def.attacks.filter((a) => a.natural), ...list] })}
-      render=${(a, set) => html`<${WeaponItem} a=${a} set=${set} specials=${items.weaponSpecials || []} c=${c} system=${def.system} />`} />
+      render=${(a, set) => html`<${WeaponItem} a=${a} set=${set} specials=${sp.weapon} c=${c} system=${def.system} />`} />
     <${Select} value="" onChange=${(name) => addWeapon(name, def, up, items)} options=${[{ value: '', label: '+ Arma…' },
       ...WEAPONS.map((w) => ({ value: `pf:${w.name}`, label: `${w.name} (${w.dice})`, group: 'Pathfinder' })),
-      ...(items.weapons || []).filter((w) => w.dice && w.dice !== '—').map((w) => ({ value: `ff:${w.name}`, label: `${w.name} (${w.dice})`, group: 'FFd20' }))]} />
+      ...(pf ? [] : items.weapons || []).filter((w) => w.dice && w.dice !== '—').map((w) => ({ value: `ff:${w.name}`, label: `${w.name} (${w.dice})`, group: 'FFd20' }))]} />
 
     <h4>Armadura e escudo</h4>
     <div class="armor-grid">
-      <${ArmorItem} label="Armadura" it=${eq.armor} presets=${ARMORS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ armor: v })} system=${def.system} />
-      <${ArmorItem} label="Escudo" it=${eq.shield} presets=${SHIELDS} specials=${items.armorSpecials || []} onChange=${(v) => setEq({ shield: v })} shield system=${def.system} />
+      <${ArmorItem} label="Armadura" it=${eq.armor} presets=${ARMORS} specials=${sp.armor} onChange=${(v) => setEq({ armor: v })} system=${def.system} />
+      <${ArmorItem} label="Escudo" it=${eq.shield} presets=${SHIELDS} specials=${sp.armor} onChange=${(v) => setEq({ shield: v })} shield system=${def.system} />
     </div>
 
     <h4>Slots do corpo</h4>
@@ -75,7 +78,7 @@ export function EquipmentSection({ def, up, c, db }) {
         <label class="inline">preço <${Num} value=${it.price} onInput=${(v) => set({ price: v })} /></label>
         <span class="small muted">${it.text || ''}</span>
       </div>`} />
-    <${SearchPicker} items=${items.consumables || []} getText=${(x) => x.name} limit=${30} requireQuery placeholder="+ Poção, éter, mote… (digite para buscar; Enter cria um novo)"
+    <${SearchPicker} items=${pf ? [] : items.consumables || []} getText=${(x) => x.name} limit=${30} requireQuery placeholder=${pf ? '+ Consumível (ex.: potion of cure light wounds; Enter cria)' : '+ Poção, éter, mote… (digite para buscar; Enter cria um novo)'}
       onPick=${(x) => setEq({ consumables: [...(eq.consumables || []), { id: Math.random().toString(36).slice(2), name: x.name, qty: 1, price: x.price, text: x.text }] })}
       onCreate=${(name) => setEq({ consumables: [...(eq.consumables || []), { id: Math.random().toString(36).slice(2), name, qty: 1, price: 0, text: '' }] })}
       renderItem=${(x) => html`<span><b>${x.name}</b> <span class="src-badge">${gil(x.price)}</span> <span class="small muted">${x.text.slice(0, 100)}</span></span>`} />

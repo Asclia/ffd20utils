@@ -7,7 +7,7 @@ import {
 import { TYPE_BY_ID, SUBTYPE_BY_ID, ELEMENTS, AFFINITY_RANK, PF_ENERGIES, FF_TO_PF, PF_TYPE_OVERRIDES, PF_SUBTYPE_OVERRIDES } from './types.js';
 import { SKILLS, isClassSkill } from './skills.js';
 import { featEffect, featKey } from './featEffects.js';
-import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS, WEAPON_MATERIALS, ARMOR_MATERIALS } from './equipment.js';
+import { emptyEquipment, weaponSpecialRider, gearSummary, SLOTS, ARMORS, WEAPON_MATERIALS, ARMOR_MATERIALS, specialsFor } from './equipment.js';
 import { raceTraitEffects } from './raceEffects.js';
 import { activeHouseRules, goneFeat, COMBAT_OPTIONS } from './houseRules.js';
 import { applyClassEffects, classBonusFeatSlots, grantedFeats, archetypeClassSkills, effectKey, weaponGroup } from './classEffects.js';
@@ -142,6 +142,18 @@ export function compute(def, db) {
   for (const it of wornItems) {
     for (const m of it.mods || []) if (m.target) addMod({ ...m, value: Number(m.value) || 0, cond: m.cond || '', source: it.name, type: m.type === 'armor-item' ? 'armor-item' : m.type });
   }
+  // magic weapon/armor special abilities of this system (flaming, keen, shadow, spell resistance…)
+  const { weapon: wSpecials, armor: aSpecials } = specialsFor(d.system, db.items || {});
+  const armorSpecialFx = { sr: 0, dr: [], resist: [] };
+  for (const it of [eq.armor, eq.shield].filter((x) => x?.name)) {
+    for (const n of it.specials || []) {
+      const s = aSpecials.find((x) => x.name === n);
+      if (!s) continue;
+      for (const m of s.mods || []) addMod({ ...m, source: `${n} ${it.name}` });
+      if (s.sr) armorSpecialFx.sr = Math.max(armorSpecialFx.sr, s.sr);
+      if (s.dr) armorSpecialFx.dr.push(s.dr);
+    }
+  }
 
   // ---- abilities
   const abil = {};
@@ -197,6 +209,9 @@ export function compute(def, db) {
   const skillRanks = (name) => Number(d.skills?.[name]) || 0;
 
   // ---- active class features (archetype swaps applied) → automatic effects, granted feats
+  const pathDB = db.pathsByClass || {};
+  const pathsOf = (c) => { const e = pathDB[c.def.id]; return e ? (c.paths || []).map((id) => e.options.find((o) => o.id === id)).filter(Boolean) : []; };
+  out.classPaths = classes.map((c) => ({ classId: c.def.id, className: c.def.name, kind: pathDB[c.def.id]?.kind, count: pathDB[c.def.id]?.count || 0, chosen: pathsOf(c) })).filter((x) => x.kind);
   const activeFeatures = [];
   for (const c of classes) {
     const lvl = Number(c.level);
@@ -208,6 +223,8 @@ export function compute(def, db) {
     const isReplaced = (name) => { const n = normFeat(name); return replaced.some((k) => k && (n === k || (n.length > 3 && (k.startsWith(n) || n.startsWith(k))))); };
     for (const f of c.def.features || []) if (f.level <= lvl && !(archs.length && isReplaced(f.name))) activeFeatures.push({ cls: c.def, f, L: lvl, value: latest[normFeat(f.name)] || findLatest(latest, f.name) });
     for (const a of archs) for (const f of a.features || []) if (f.level <= lvl) activeFeatures.push({ cls: c.def, f: { ...f, archetype: a.name }, L: lvl, value: '' });
+    // domains, bloodlines, schools, mysteries…: powers by level
+    for (const p of pathsOf(c)) for (const f of p.powers || []) if (f.level <= lvl) activeFeatures.push({ cls: c.def, f: { ...f, path: p.name }, L: lvl, value: '' });
   }
   out.activeFeatures = activeFeatures;
   const armorDef = eq.armor?.name ? ARMORS.find((x) => x.name === String(eq.armor.name).toLowerCase()) : null;
@@ -281,6 +298,27 @@ export function compute(def, db) {
   if (house?.twf && featFlags.gtwf) { featFlags.itwf = true; featFlags.gtwf = bab >= 11; }
   if (house) for (const f of d.feats || []) { const g = goneFeat(house, f.name); if (g) out.warnings.push(`${f.name} não existe no Moogle in the Room${g.by ? ` (agora: ${g.by})` : ''}.`); }
   out.classEffectNotes = cfx.notes;
+  out.classShorts = cfx.shorts;
+  // Sp powers of domains / bloodlines / schools → "Domain Spell-Like Abilities (CL 6th) 7/day—fire bolt"
+  const KIND_SLA = { domain: 'Domain', bloodline: 'Bloodline', school: 'Arcane School', mystery: 'Mystery', spirit: 'Spirit' };
+  const AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+  out.pathSLA = [];
+  for (const c of classes) {
+    const items = [];
+    let kind = '';
+    for (const p of pathsOf(c)) for (const f of p.powers || []) {
+      if (f.type !== 'Sp' || f.level > Number(c.level)) continue;
+      kind = kind || p.kind;
+      const t = f.text || '';
+      const u = /(\d+) \+ (?:your |his |her )?(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) modifier/i.exec(t);
+      const lv = /once per day|1\/day/i.test(t) ? '1/day' : /at will/i.test(t) ? 'At will' : u ? `${Math.max(1, Number(u[1]) + m[AB[u[2].toLowerCase()]])}/day` : '';
+      items.push({ freq: lv || '—', name: f.name.toLowerCase(), key: `${p.id}:${f.name}` });
+    }
+    if (items.length) {
+      const ab = c.def.castingAbility || 'wis';
+      out.pathSLA.push({ label: `${KIND_SLA[kind] || ''} Spell-Like Abilities`.trim(), cl: Number(c.level), conc: Number(c.level) + (abil[ab] === null ? 0 : m[ab]), items });
+    }
+  }
   out.combatToggles = [...cfAbil.toggles, ...cfx.toggles];
   out.classImmunities = cfx.immune;
   const conLike = flags.chaForCon || type.id === 'undead' ? m.cha : (abil.con === null ? 0 : m.con);
@@ -365,7 +403,18 @@ export function compute(def, db) {
         perDay[L] = n + (am >= L ? Math.floor((am - L) / 4) + 1 : 0); // PF1e bonus spells by ability modifier
       }
       const maxSL = Math.max(0, ...Object.keys(perDay).map(Number));
-      out.pfSpells.push({ source: c.def.name, classId: c.def.id, cl: c.level, ability: ab, spontaneous: !!c.def.spontaneous, perDay, maxSL, monster: !!c.monster });
+      // domain spells (one extra slot per spell level) and bonus spells known from bloodlines / mysteries
+      const cls = classes.find((x) => x.def.id === c.def.id);
+      const ps = cls ? pathsOf(cls) : [];
+      const extra = [];
+      for (const p of ps) for (const [k, name] of Object.entries(p.spells || {})) {
+        const n = Number(k);
+        const sl = p.kind === 'domain' ? n : p.kind === 'bloodline' ? (c.def.id === 'pf-bloodrager' ? Math.floor((n - 4) / 3) : Math.floor((n - 1) / 2)) : p.kind === 'mystery' ? Math.floor(n / 2) : n;
+        const ok = p.kind === 'domain' || p.kind === 'spirit' ? sl <= maxSL : n <= c.level;
+        if (ok && sl >= 1 && sl <= maxSL) extra.push({ level: sl, name, kind: p.kind, path: p.name });
+      }
+      const domainSlot = !!c.def.domainSlots && ps.some((p) => p.kind === 'domain');
+      out.pfSpells.push({ source: c.def.name, classId: c.def.id, cl: c.level, ability: ab, spontaneous: !!c.def.spontaneous, perDay, maxSL, monster: !!c.monster, extra, domainSlot, paths: ps.map((p) => ({ kind: p.kind, name: p.name })) });
       mp.maxSL = Math.max(mp.maxSL, maxSL);
       mp.parts.push({ source: c.def.name, base: 0, bonus: 0, ability: ab, sl: maxSL, cl: c.level });
     }
@@ -540,8 +589,11 @@ export function compute(def, db) {
         let att = bab + atkAbil + sz.mod + (Number(a.enhancement) || 0) + ((a.masterwork || wmat.mw) && !Number(a.enhancement) && !a.natural ? 1 : 0) + (Number(a.attackBonus) || 0) + atkMods + (kind === 'melee' ? atkMelee : atkRanged);
         let dmg = dmgAbil + (wmat.dmg || 0) + (Number(a.enhancement) || 0) + (Number(a.damageBonus) || 0) + dmgMods + (kind === 'melee' ? dmgMelee : dmgRanged);
         let critRange = Number(a.critRange) || 20;
+        // keen (and similar) magic weapon abilities double the threat range; speed adds an attack
+        const wsp = a.natural ? [] : (a.specials || []).map((n) => wSpecials.find((x) => x.name === n)).filter(Boolean);
+        if (wsp.some((x) => x.keen) && !featAttackHooks.some((h) => /improved critical/i.test(h.f?.name || '') && h.eff.attack(ctx, ax, h.f, h.on)?.doubleThreat)) critRange = 21 - (21 - critRange) * 2;
         let diceSteps = 0;
-        let extraAttacks = 0;
+        let extraAttacks = wsp.some((x) => x.extraAttack) ? 1 : 0;
         for (const hk of featAttackHooks) {
           const r = hk.eff.attack(ctx, ax, hk.f, hk.on);
           if (!r) continue;
@@ -582,7 +634,7 @@ export function compute(def, db) {
         const riders = [];
         if (!a.natural) {
           for (const sp of a.specials || []) {
-            const def0 = (db.items?.weaponSpecials || []).find((x) => x.name === sp);
+            const def0 = wSpecials.find((x) => x.name === sp);
             const r = def0 ? weaponSpecialRider(def0.text) : '';
             if (r) riders.push(r);
           }
@@ -626,6 +678,14 @@ export function compute(def, db) {
   for (const c of classes) classSkillList.push(...(c.def.classSkills || []));
   const archSkills = archetypeClassSkills(activeFeatures, SKILLS.map((x) => x.name));
   classSkillList.push(...archSkills.add);
+  // class skills granted by bloodlines / mysteries ("Class Skill: Perception", "Knowledge (arcana)")
+  const skillsIn = (txt) => SKILLS.filter((sk) => {
+    const t = String(txt || '').toLowerCase();
+    const base = sk.name.replace(/\s*\(.*\)/, '').toLowerCase();
+    const sub = (sk.name.match(/\((.*)\)/) || [])[1];
+    return sub ? t.includes(base) && t.includes(sub.toLowerCase()) : new RegExp(`\\b${base}\\b`).test(t);
+  }).map((sk) => sk.name);
+  for (const c of classes) for (const p of pathsOf(c)) if (p.classSkills) classSkillList.push(...skillsIn(p.classSkills));
   for (const r of archSkills.remove) { const i = classSkillList.findIndex((x) => x.toLowerCase() === r.toLowerCase()); if (i >= 0) classSkillList.splice(i, 1); }
   out.archetypeSkills = archSkills;
   out.skillPoints = {
@@ -713,6 +773,19 @@ export function compute(def, db) {
   }
   for (const it of wornItems) for (const el of it.strong || []) applyFrom(el, 'strong');
   for (const [el, v] of materialResist) { const k = elKey(el); if (k) resistAmt[k] = Math.max(resistAmt[k] || 0, v); }
+  // domain / bloodline / mystery powers: "you gain resist fire 10 … increases to 20 at 12th level … immunity to fire at 20th"
+  for (const { f, L } of activeFeatures.filter((x) => x.f.path)) {
+    const t = f.text || '';
+    const r = /resist(?:ance)? (acid|cold|electricity|fire|sonic) (\d+)|resist (\d+) (?:to|against) (acid|cold|electricity|fire|sonic)/i.exec(t);
+    if (r) {
+      const el = (r[1] || r[4]).toLowerCase();
+      let v = Number(r[2] || r[3]);
+      for (const m of t.matchAll(/increases to (\d+) at (\d+)(?:st|nd|rd|th) level/gi)) if (L >= Number(m[2])) v = Number(m[1]);
+      const im = new RegExp(`(?:at|At) (\\d+)(?:st|nd|rd|th) level,? you (?:gain|become) immun(?:e|ity) to ${el}`).exec(t);
+      const k = elKey(el);
+      if (im && L >= Number(im[1])) { if (k) apply(k, 'immune'); } else if (k) resistAmt[k] = Math.max(resistAmt[k] || 0, v);
+    }
+  }
   // weakness vs immunity from multiple sources: immunity wins (rank)
   for (const el of EL) {
     const o = d.elementOverrides?.[el];
@@ -746,11 +819,12 @@ export function compute(def, db) {
   for (const st of traitSources) if (st.dr) drParts.push(st.dr);
   const drFeat = resolveMods(mods.filter((x) => x.target === 'dr'));
   if (drFeat) drParts.push(`${drFeat}/—`);
+  drParts.push(...armorSpecialFx.dr);
   if (d.dr) drParts.unshift(d.dr);
   out.dr = d.dr ? d.dr : drParts.join(', ');
   const crNum = computeCR(d, out);
   out.cr = crNum;
-  let sr = d.sr ? Number(d.sr) : null;
+  let sr = d.sr ? Number(d.sr) : armorSpecialFx.sr || null;
   const srCR = Math.max(0, ...subtypeDefs.map((s) => s.flags?.srCR || 0));
   if (!sr && srCR && crNum !== null) sr = Math.floor(crNum) + srCR;
   if (!sr && boss === 'super' && crNum !== null) sr = Math.floor(crNum) + 15;
@@ -808,15 +882,20 @@ export function compute(def, db) {
       feats.push({ ...f, key: `${c.def.id}:${f.name}` });
     }
     for (const f of archFeats) feats.push({ ...f, key: `${f.archetypeId}:${f.name}` });
+    for (const p of pathsOf(c)) for (const f of p.powers || []) if (f.level <= lvl) feats.push({ ...f, archetype: p.name, key: `${p.id}:${f.name}` });
     for (const f of feats) {
       const ov = (d.classFeatures || {})[f.key] || {};
       const hiddenDefault = HIDDEN_FEATURES.test(f.name);
-      const placement = ov.placement || (hiddenDefault ? 'hidden' : guessPlacement(f));
+      // domain/bloodline powers that have their own statblock spot (Sp block, Resist line)
+      const pathPower = pathsOf(c).some((p) => f.key.startsWith(`${p.id}:`));
+      const pathHidden = pathPower && (f.type === 'Sp' || /(acid|cold|electricity|fire|sonic|energy) resistance$/i.test(f.name));
+      const placement = ov.placement || (hiddenDefault || pathHidden ? 'hidden' : guessPlacement(f));
       const latest = f.archetype ? '' : (latestValue[normFeat(f.name)] || findLatest(latestValue, f.name));
       const value = latest ? (latest.match(/\(([^)]*)\)|\s([+-]?\d+d?\d*)$/) || [])[1] || (latest.match(/\s([+-]?\d+d?\d*)$/) || [])[1] : '';
       const entry = { key: f.key, classId: c.def.id, className: c.def.name, archetype: f.archetype || '', name: f.name, kind: f.type, level: f.level, text: f.text, placement, note: ov.note || '', value: value || '', showText: !!ov.showText, auto: (out.classEffectNotes || {})[`${c.def.id}:${f.name}`] || '' };
       out.classFeatureList.push(entry);
-      if (placement !== 'hidden') abilities.push({ name: f.name, kind: f.type, placement, short: `${f.name.toLowerCase()}${value ? ` (${value})` : ''}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
+      const computedShort = (out.classShorts || {})[`${c.def.id}:${f.name}`];
+      if (placement !== 'hidden') abilities.push({ name: f.name, kind: f.type, placement, short: `${computedShort || `${f.name.toLowerCase()}${value ? ` (${value})` : ''}`}${ov.note ? ` (${ov.note})` : ''}`, text: ov.showText ? f.text : '', origin: c.def.name, classFeature: true, value });
     }
     // talents: limit from the class table ("Knight Talent" at 2nd, 4th…), minus talents an archetype replaces
     for (const g of talentDB[c.def.id] || []) {
@@ -824,7 +903,8 @@ export function compute(def, db) {
       const lost = archFeats.filter((f) => (f.replaces || []).some((r) => normFeat(r).replace(/s$/, '') === g.key || normFeat(r).replace(/s$/, '') === g.key.replace(/s$/, ''))).length;
       const allowed = base === null ? null : Math.max(0, base - lost);
       const chosen = (d.talents || []).filter((t) => t.classId === c.def.id && t.group === g.group);
-      out.talentGroups.push({ classId: c.def.id, className: c.def.name, group: g.group, allowed, lost, chosen, items: g.items, alsoFrom: g.alsoFrom || [], source: g.source, advanced: g.advanced });
+      const pIds = pathsOf(c).map((p) => p.id);
+      out.talentGroups.push({ classId: c.def.id, className: c.def.name, group: g.group, allowed, lost, chosen, items: g.byPath ? g.items.filter((x) => !x.path || pIds.includes(x.path)) : g.items, alsoFrom: g.alsoFrom || [], source: g.source, advanced: g.advanced, byPath: !!g.byPath, needsPath: !!g.byPath && !pIds.length });
       if (allowed !== null && chosen.length > allowed) out.warnings.push(`${g.group}: ${chosen.length} escolhidos, limite ${allowed} no nível ${lvl}.`);
       const inGroupLine = [];
       for (const t of chosen) {
@@ -879,7 +959,7 @@ export function compute(def, db) {
 }
 
 
-const HIDDEN_FEATURES = /^(damage reduction|weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
+const HIDDEN_FEATURES = /^(ac bonus|unarmed strike|fast movement|rage powers?|hexe?s?|discovery|discoveries|magus arcana|ninja tricks?|mercy|mercies|cruelty|cruelties|revelations?|arcanist exploits?|ki powers?|slayer talents?|investigator talents?|vigilante talents?|social talents?|rogue talents?|animal companion .*|.*archetypes$|damage reduction|spellcasting|weapon proficiency|armor proficiency|armor and shield proficiency|domains?|bloodline|arcane school|mystery|spirit|bonus feats?|alchemy|deeds|ex-|weapon and armor proficiency|spells?|cantrips|orisons|jutsus|ninjutsus|class skills|code of conduct|ex-|alignment|songs?|limit breaks?|mp pool|favored|bonus languages|spellbooks?|adding spells|arcane spells and armor|elemental arcane schools|chaotic, evil|aura$|.* talents?$|.*arcana$)/i;
 function normFeat(n) {
   return String(n).replace(/\s*\(.*?\)/g, '').replace(/\s+[+-]?\d+(d\d+)?$/, '').replace(/\s+(I|II|III|IV|V)$/, '').trim().toLowerCase();
 }
@@ -888,10 +968,11 @@ function findLatest(latest, name) {
   for (const [k, v] of Object.entries(latest)) if (k && (k.startsWith(n) || n.startsWith(k))) return v;
   return '';
 }
-const ATTACK_RE = /(attack|strike|sneak|smite|lancer|jump|breath|bomb|blast|shot|slash|rage|challenge|lancet|fury|throw|stance of|flurry|kenki|blitz|leap|swoop|dive|cleave|charge|mark|technique|combo|bite)/i;
-const DEFENSE_RE = /(evasion|uncanny dodge|fortification|defens|stalwart|resist|immun|reduction|ac bonus|bulwark|shield|protect|armor training|block|parry|endurance|resilien|ward|indestructible|dodge|mettle|guard)/i;
+const ATTACK_RE = /(channel|attack|strike|sneak|smite|lancer|jump|breath|bomb|blast|shot|slash|rage|challenge|lancet|fury|throw|stance of|flurry|kenki|blitz|leap|swoop|dive|cleave|charge|mark|technique|combo|bite)/i;
+const DEFENSE_RE = /(bravery|trap sense|danger sense|evasion|uncanny dodge|fortification|defens|stalwart|resist|immun|reduction|ac bonus|bulwark|shield|protect|block|parry|endurance|resilien|ward|indestructible|dodge|mettle|guard)/i;
 const ACTIVATED_RE = /\bas an? (standard|swift|move|full-round|immediate|free) action\b|\b\d+\/day\b|\btimes per day\b|\bonce per (day|round|encounter)\b/i;
 function guessPlacement(f) {
+  if (/^aura\b|^aura of /i.test(f.name)) return 'aura';
   if (DEFENSE_RE.test(f.name)) return 'defensive';
   if (ATTACK_RE.test(f.name)) return 'specialAttack';
   if (ACTIVATED_RE.test((f.text || '').slice(0, 600))) return 'specialAbility';
@@ -915,7 +996,19 @@ function guessSkillAbility(name) {
 // Monsters: chosen CR. NPCs: FFd20 rule (heroic = level − 1, basic = level − 2; PC wealth +1).
 export function computeCR(d, out) {
   if (d.crOverride !== null && d.crOverride !== undefined && d.crOverride !== '') return Number(d.crOverride);
-  if (d.mode !== 'npc') return d.cr === null || d.cr === undefined ? null : Number(d.cr);
+  if (d.mode !== 'npc') {
+    if (d.cr === null || d.cr === undefined) return null;
+    const base = Number(d.cr);
+    // monsters with class levels (PF1e Bestiary "Monsters with class levels"): +1 CR per level of a key class
+    // (one that works with the monster's abilities), +1 per 2 levels otherwise (NPC classes count as non-key)
+    let add = 0;
+    for (const c of out.classes || []) add += c.def.kind !== 'basic' && c.key !== false ? Number(c.level) : Number(c.level) / 2;
+    add = Math.floor(add);
+    out.crBase = base;
+    out.crFromClasses = add;
+    if (!add) return base;
+    return base < 1 ? Math.max(1, add) : base + add;
+  }
   const lvl = out.classLevels + (out.racialHD || 0);
   if (!lvl) return null;
   const heroic = out.classes.some((c) => c.def.kind !== 'basic');

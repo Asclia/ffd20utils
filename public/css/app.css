@@ -505,3 +505,4 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 .house-rules { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .house-rule { align-items: flex-start; }
 .house-rule input { margin-top: 3px; }
+.path-picker { margin: 4px 0 2px; }

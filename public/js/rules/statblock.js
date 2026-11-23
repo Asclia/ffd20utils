@@ -84,6 +84,12 @@ export function buildStatblock(d, c, db) {
   }
   // spells known
   const spells = (d.caster?.spells || []).filter((x) => x.name);
+  for (const s of c.pathSLA || []) {
+    B.push({ t: 'plain', text: `<b>${s.label}</b> (CL ${ordinal(s.cl)}; concentration ${sign(s.conc)})`, html: true });
+    const byF = {};
+    for (const it of s.items) (byF[it.freq] = byF[it.freq] || []).push(it.name);
+    for (const [f, list] of Object.entries(byF)) B.push({ t: 'indent', text: `${f}—${list.join(', ')}` });
+  }
   if (pf && c.pfSpells?.length) {
     // Pathfinder: spells per day by class (bonus spells from the casting ability included)
     c.pfSpells.forEach((part, i) => {
@@ -92,10 +98,20 @@ export function buildStatblock(d, c, db) {
       const mine = spells.filter((x) => !x.classId || x.classId === part.classId || c.pfSpells.length === 1);
       for (const lv of Object.keys(part.perDay).map(Number).sort((a, b) => b - a)) {
         const names = mine.filter((x) => Number(x.level) === lv).map((x) => x.name).sort();
+        // bonus spells known (bloodline, mystery) join the list; the domain spell gets the usual D mark
+        const ex = (part.extra || []).filter((x) => x.level === lv);
+        for (const x of ex.filter((y) => y.kind !== 'domain')) if (!names.some((n) => n.toLowerCase() === x.name.toLowerCase())) names.push(x.name);
+        const dom = ex.filter((y) => y.kind === 'domain');
+        const domTxt = dom.length ? `${dom[0].name}<sup>D</sup>` : '';
         const dc = 10 + lv + (c.abilities[part.ability] === null ? 0 : Math.floor((c.abilities[part.ability] - 10) / 2));
-        const count = lv === 0 ? 'at will' : part.spontaneous ? `${part.perDay[lv]}/day` : `${part.perDay[lv]}`;
-        B.push({ t: 'indent', text: `${lv === 0 ? '0' : ordinal(lv)} (${count}; DC ${dc})—${names.join(', ')}` });
+        const count = lv === 0 ? 'at will' : part.spontaneous ? `${part.perDay[lv]}/day` : `${part.perDay[lv]}${part.domainSlot && dom.length ? '+1' : ''}`;
+        B.push({ t: 'indent', text: `${lv === 0 ? '0' : ordinal(lv)} (${count}; DC ${dc})—${[...(domTxt ? [domTxt] : []), ...names].join(', ')}`, html: true });
       }
+      // "D Domain spell; Domains Fire, Sun" / "Bloodline draconic" / "Mystery flame" / "School evocation"
+      const byKind = {};
+      for (const p of part.paths || []) (byKind[p.kind] = byKind[p.kind] || []).push(p.name);
+      if (byKind.domain) B.push({ t: 'indent', text: `<b>D</b> Domain spell; <b>Domain${byKind.domain.length > 1 ? 's' : ''}</b> ${byKind.domain.join(', ')}`, html: true });
+      for (const [k, label] of [['bloodline', 'Bloodline'], ['mystery', 'Mystery'], ['school', 'Arcane School'], ['spirit', 'Spirit']]) if (byKind[k]) B.push({ t: 'indent', text: `<b>${label}</b> ${byKind[k].join(', ').toLowerCase()}`, html: true });
     });
   } else if (!pf && (spells.length || c.mp.total > 0)) {
     const src = c.mp.parts.map((p) => (p.source.length <= 2 ? p.source : p.source)).join('/');

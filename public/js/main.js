@@ -33,9 +33,9 @@ const Emblem = () => html`<svg viewBox="0 0 64 64" aria-hidden="true">
 
 async function loadDB() {
   const get = (f) => fetch(`data/${f}`).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); });
-  const [ffClasses, featsRaw, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes] = await Promise.all(
+  const [ffClasses, featsRaw, ffSpells, ffRaces, talentsByClass, ffArchetypes, items, umr, pfSubtypesRaw, pfClasses, pfRaces, pfSpells, tables, monsters, pfArchetypes, pfTalents, pfPaths] = await Promise.all(
     ['classes.json', 'feats.json', 'spells.json', 'races.json', 'talents.json', 'archetypes.json', 'items.json', 'umr.json', 'pf-subtypes.json',
-      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json'].map(get));
+      'pf-classes.json', 'pf-races.json', 'pf-spells.json', 'tables.json', 'monsters.json', 'pf-archetypes.json', 'pf-talents.json', 'pf-paths.json'].map(get));
   const archetypes = [...ffArchetypes, ...pfArchetypes];
   const feats = featsRaw.map((f) => ({ ...f, name: canonicalFeatName(f.name) })); // "Weapon Focus, Greater" → "Greater Weapon Focus"
   // Pathfinder subtypes not already defined with rules in types.js
@@ -49,7 +49,8 @@ async function loadDB() {
   const spells = [...ffSpells.map((x) => ({ ...x, system: 'ffd20' })), ...pfSpells.map((x) => ({ ...x, class: `pf-${x.class}` }))];
   archetypes.sort((a, b) => a.name.localeCompare(b.name));
   return {
-    classes, feats, spells, races, talentsByClass, archetypes, items, umr, pfSubtypes, tables, monsters,
+    classes, feats, spells, races, talentsByClass: { ...talentsByClass, ...pfTalents }, archetypes, items, umr, pfSubtypes, tables, monsters,
+    pathsByClass: pfPaths,
     pfSubtypesById: Object.fromEntries(pfSubtypes.map((x) => [x.id, x])),
     archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
     classesById: Object.fromEntries(classes.map((c) => [c.id, c])),

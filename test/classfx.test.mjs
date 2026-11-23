@@ -7,12 +7,15 @@ const load = (f) => JSON.parse(readFileSync(new URL(`../public/data/${f}`, impor
 const ff = load('classes.json').map((c) => ({ ...c, system: 'ffd20' }));
 const pf = load('pf-classes.json').map((c) => ({ ...c, id: `pf-${c.id}`, system: 'pf1e' }));
 const archetypes = [...load('archetypes.json'), ...load('pf-archetypes.json')];
+const pfPaths = load('pf-paths.json');
+const pfTalents = load('pf-talents.json');
 const db = {
   classesById: Object.fromEntries([...ff, ...pf].map((c) => [c.id, c])),
   racesById: Object.fromEntries([...load('races.json'), ...load('pf-races.json')].map((r) => [r.id, r])),
   homebrew: {}, talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
-  items: load('items.json'), feats: load('feats.json'),
+  items: load('items.json'), feats: load('feats.json'), pathsByClass: pfPaths,
 };
+db.talentsByClass = { ...db.talentsByClass, ...pfTalents };
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('ok -', name); };
 const npc = (system, classId, level, extra = {}) => ({ ...newCreature('npc', system), abilities: { str: 14, dex: 14, con: 14, int: 10, wis: 14, cha: 14 }, classes: [{ id: 'c1', classId, level }], ...extra });
@@ -226,6 +229,64 @@ t('inverted feat names from the PF index ("Weapon Focus, Greater") are automated
   const out = md(d, c);
   assert.match(out, /Greater Weapon Focus \(longsword\)/);
   assert.match(out, /Improved Critical \(longsword\)/);
+});
+
+t('PF cleric domains: powers by level, domain spells, statblock line', () => {
+  const d = npc('pf1e', 'pf-cleric', 6);
+  d.classes[0].paths = ['domain-fire', 'domain-sun'];
+  const c = compute(d, db);
+  assert.ok(c.classFeatureList.some((f) => f.name === 'Fire Bolt'));
+  assert.ok(c.classFeatureList.some((f) => f.name === 'Fire Resistance')); // 6th level power
+  const out = md(d, c);
+  assert.match(out, /burning hands\^D/);
+  assert.match(out, /\*\*Domains\*\* Fire, Sun/);
+});
+
+t('PF sorcerer bloodline: bonus spells known, class skill, powers', () => {
+  const d = npc('pf1e', 'pf-sorcerer', 5);
+  d.classes[0].paths = ['bloodline-draconic'];
+  const c = compute(d, db);
+  assert.ok(c.skills.find((s) => s.name === 'Perception').classSkill);
+  assert.ok(c.classFeatureList.some((f) => f.name === 'Claws'));
+  const out = md(d, c);
+  assert.match(out, /mage armor/i);
+  assert.match(out, /resist energy/i);
+  assert.match(out, /\*\*Bloodline\*\* draconic/);
+});
+
+t('PF talent groups with limits (rogue talents, rage powers)', () => {
+  const r = compute(npc('pf1e', 'pf-rogue', 6), db);
+  const g = r.talentGroups.find((x) => x.group === 'Rogue Talents');
+  assert.equal(g.allowed, 3);
+  assert.ok(g.items.length > 100);
+  const b = compute(npc('pf1e', 'pf-barbarian', 4), db);
+  assert.equal(b.talentGroups.find((x) => x.group === 'Rage Powers').allowed, 2);
+});
+
+t('monster with class levels: HD, BAB and CR (key class +1/level, other +1/2 levels)', () => {
+  const d = { ...newCreature('monster', 'pf1e'), type: 'outsider', cr: 4, autoHD: false, racialHD: 4 };
+  const base = compute(d, db);
+  d.classes = [{ id: 'f', classId: 'pf-fighter', level: 3 }];
+  const c = compute(d, db);
+  assert.equal(c.hd, 7);
+  assert.equal(c.bab, base.bab + 3);
+  assert.equal(c.cr, 7);
+  d.classes[0].key = false;
+  assert.equal(compute(d, db).cr, 5);
+  assert.ok(compute(d, db).feats !== undefined);
+});
+
+t('PF magic weapon abilities: keen doubles threat, flaming adds 1d6 fire', () => {
+  const d = npc('pf1e', 'pf-fighter', 4);
+  d.attacks = [{ ...newAttack('melee', false), name: 'longsword', dice: '1d8', critRange: 19, enhancement: 1, specials: ['Keen', 'Flaming'] }];
+  const c = compute(d, db);
+  assert.match(c.attacks.melee[0], /17–20/);
+  assert.match(c.attacks.melee[0], /plus 1d6 fire/);
+});
+
+t('PF class feature texts are clean (no FAQ boxes)', () => {
+  const cl = load('pf-classes.json').find((x) => x.id === 'cleric');
+  assert.ok(!cl.features.some((f) => /^FAQ|Converting NPCs/.test(f.text)));
 });
 
 console.log(`${passed} class-effect tests passed`);

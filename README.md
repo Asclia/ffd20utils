@@ -47,6 +47,27 @@ padrão para novas fica em *Biblioteca → Configurações*). No Pathfinder entr
 magias do PF1e (d20pfsrd), energias no lugar dos elementos do FF, magias por dia no lugar de MP e sem
 regras de chefe/Limit Break.
 
+## Pathfinder 1e: escolhas de classe e talentos
+
+- **Domínios, linhagens, escolas, mistérios e espíritos** (Cleric, Inquisitor, Sorcerer, Bloodrager, Wizard,
+  Oracle, Shaman): escolha em Classes; os poderes entram como características de classe no nível certo, os poderes
+  Sp formam o bloco *Domain/Bloodline Spell-Like Abilities* com usos por dia, resistências viram a linha *Resist*,
+  magias de domínio aparecem com ^D (slot extra) e as magias bônus de linhagem/mistério entram na lista.
+- **Talentos com limite por nível**: Rogue Talents, Rage Powers, Hexes, Discoveries, Magus Arcana, Ninja Tricks,
+  Slayer/Investigator/Vigilante Talents, Arcanist Exploits, Mercies, Ki Powers e Revelations (do mistério escolhido).
+- **Linha do statblock com contas**: channel energy (usos/dia, CD, dado), lay on hands, rage, bardic performance,
+  ki pool, arcane pool, bombs, stunning fist, smite etc.
+- **Poderes especiais de armas e armaduras do PF** (flaming, keen, holy, speed, fortification, shadow, spell
+  resistance…), com efeito automático.
+- Textos das características de classe vêm do Archives of Nethys (OGL), sem os quadros de FAQ do d20pfsrd. Itens,
+  feats e UMRs só do FFd20 não aparecem em criaturas Pathfinder.
+
+## Monstros com níveis de classe
+
+Em *Monstros → Níveis de classe* dá para somar classes (FFd20 ou PF) aos HD raciais: BAB, saves, PV, perícias,
+feats, magias e características entram sozinhos. O CR sobe +1 por nível de **classe-chave** e +1 a cada 2 níveis
+nas outras (regra do Bestiário); o CR base continua sendo o da criatura.
+
 ## Legendary e Lair Actions
 
 A seção **Legendary e Lair Actions** do editor liga cada uma separadamente. Ações lendárias têm número de ações
@@ -165,7 +186,7 @@ python3 tools/build_data.py ./cache
 ```
 
 Tabelas aleatórias e listas de masmorra (`tables.json`, `monsters.json`) vêm de `tools/build_tables.py`;
-as classes, raças e magias do Pathfinder de `tools/build_pf.py`; os arquétipos do Pathfinder (1.168, do Archives of Nethys) de `tools/build_pf_archetypes.py`. Licenças:
+as classes, raças e magias do Pathfinder de `tools/build_pf.py`; os arquétipos do Pathfinder (1.168, do Archives of Nethys) de `tools/build_pf_archetypes.py`; talentos, domínios/linhagens/escolas/mistérios/espíritos e os textos das características de classe do PF de `tools/build_pf_extras.py`. Licenças:
 
 - **Maze Rats** © Ben Milton — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Ironsworn: Delve** © Shawn Tomkin — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (via Datasworn).
@@ -180,6 +201,7 @@ feats em `public/js/rules/featEffects.js`.
 
 - Os efeitos numéricos das características de classe mais comuns são aplicados (lista abaixo); características com escolhas abertas (favored enemy, domínios, talentos) continuam como texto: use *Modificadores personalizados* se precisar.
 - Classes ocultistas do Pathfinder (Kineticist, Medium…) não têm tabela de classe no d20pfsrd, então não aparecem como classe (as listas de magia delas existem).
+- Domínios, linhagens etc. trazem só o tema principal (subdomínios e variantes ficam de fora).
 - Feats sem ⚙ são listados no statblock, mas os efeitos deles não são calculados.
 - O texto dos statblocks é em inglês (padrão dos statblocks de PF1e e dos termos do FFd20); a interface é em português.
 

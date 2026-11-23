@@ -10,7 +10,7 @@ export function TalentsSection({ def, up, c }) {
   const total = groups.reduce((s, g) => s + g.chosen.length, 0);
   const cap = groups.reduce((s, g) => s + (g.allowed || 0), 0);
   return html`<${Section} title="Talentos de classe" id="talents" badge=${`${total}/${cap}`}>
-    <div class="muted small">Limite pelo nível de cada classe (contado na tabela da classe; arquétipos que substituem talentos reduzem o limite). Talentos avançados podem ser trocados por talentos comuns. Por padrão aparecem no SQ como <i>Knight Talents [a, b]</i>, como nos statblocks do FFd20.</div>
+    <div class="muted small">Limite pelo nível de cada classe (contado na tabela da classe; arquétipos que substituem talentos reduzem o limite). Talentos avançados podem ser trocados por talentos comuns. Por padrão aparecem no SQ como <i>${def.system === 'pf1e' ? 'rogue talents [a, b]' : 'Knight Talents [a, b]'}</i>, como nos statblocks ${def.system === 'pf1e' ? 'do Pathfinder' : 'do FFd20'}.</div>
     ${groups.map((g) => html`<${TalentGroup} key=${g.classId + g.group} g=${g} groups=${groups} def=${def} up=${up} />`)}
   </${Section}>`;
 }
@@ -31,6 +31,7 @@ function TalentGroup({ g, groups, def, up }) {
       <div class="spacer"></div>
       ${g.allowed === 0 ? html`<span class="small muted">disponível em níveis mais altos</span>` : html`<button class="btn small" onClick=${() => setAdding(!adding)}>${adding ? 'fechar' : '+ escolher'}</button>`}
     </div>
+    ${g.needsPath ? html`<div class="small warn">Escolha o mistério da classe (em Classes) para ver as revelações dele.</div>` : null}
     ${g.chosen.map((t) => {
       const info = pool.find((x) => x.name === t.name) || {};
       return html`<div class="talent-row">

@@ -55,9 +55,9 @@ function rng(seed) {
 }
 
 // ------------------------------------------------------------------ abilities
-export function buildAbilities(def, c, role) {
+export function buildAbilities(def, c, role, kind) {
   const R = ROLES[role] || ROLES.melee;
-  const heroic = c.classes.length ? c.classes.some((x) => x.def.kind !== 'basic') : true;
+  const heroic = kind ? kind === 'heroic' : c.classes.length ? c.classes.some((x) => x.def.kind !== 'basic') : true;
   const arr = NPC_ARRAYS[R.array][heroic ? 'heroic' : 'basic'];
   const abilities = Object.fromEntries(ABIL.map((a, i) => [a, arr[i]]));
   if (role === 'finesse' || role === 'skill') { // Dex first, Str moderate

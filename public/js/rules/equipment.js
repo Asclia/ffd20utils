@@ -117,6 +117,48 @@ export function specialGil(cost) {
   return v >= 100 ? v : 0;
 }
 
+// ------------------------------------------------------------------ Pathfinder magic weapon / armor special abilities (Core Rulebook + common)
+// text: "+1d6 fire damage." is read as a damage rider; keen doubles the threat range; armor mods apply to the wearer
+const W = (name, cost, text, extra = {}) => ({ name, cost, text, source: 'Pathfinder', ...extra });
+export const PF_WEAPON_SPECIALS = [
+  W('Flaming', '+1', '+1d6 fire damage.'), W('Frost', '+1', '+1d6 cold damage.'), W('Shock', '+1', '+1d6 electricity damage.'), W('Corrosive', '+1', '+1d6 acid damage.'),
+  W('Thundering', '+1', 'Extra sonic damage on a critical hit (+1d8 per multiplier step) and the target may be deafened.'),
+  W('Flaming Burst', '+2', '+1d6 fire damage, +1d10 fire per crit multiplier step on a critical hit.'), W('Icy Burst', '+2', '+1d6 cold damage, +1d10 cold per crit multiplier step on a critical hit.'),
+  W('Shocking Burst', '+2', '+1d6 electricity damage, +1d10 electricity per crit multiplier step on a critical hit.'), W('Corrosive Burst', '+2', '+1d6 acid damage, +1d10 acid per crit multiplier step on a critical hit.'),
+  W('Keen', '+1', 'Doubles the threat range (slashing or piercing weapons).', { keen: true }),
+  W('Holy', '+2', 'Good-aligned; +2d6 damage against evil creatures.'), W('Unholy', '+2', 'Evil-aligned; +2d6 damage against good creatures.'),
+  W('Axiomatic', '+2', 'Lawful-aligned; +2d6 damage against chaotic creatures.'), W('Anarchic', '+2', 'Chaotic-aligned; +2d6 damage against lawful creatures.'),
+  W('Bane', '+1', '+2 enhancement and +2d6 damage against the chosen creature type.'), W('Ghost Touch', '+1', 'Full damage against incorporeal creatures.'),
+  W('Defending', '+1', 'Transfer some or all of the enhancement bonus to AC.'), W('Merciful', '+1', '+1d6 nonlethal damage; all damage is nonlethal.'),
+  W('Returning', '+1', 'A thrown weapon flies back to the thrower.'), W('Seeking', '+1', 'Ranged; ignores miss chance from concealment.'), W('Distance', '+1', 'Ranged; doubles the range increment.'),
+  W('Wounding', '+2', '1 point of bleed damage on a hit.'), W('Disruption', '+2', 'Undead hit must save (DC 14 Will) or be destroyed.'),
+  W('Speed', '+3', 'One extra attack at the highest bonus on a full attack.', { extraAttack: true }), W('Brilliant Energy', '+4', 'Ignores nonliving matter (armor and shield bonuses).'),
+  W('Dancing', '+4', 'Fights on its own for 4 rounds.'), W('Vorpal', '+5', 'Severs the head on a natural 20 confirmed critical (slashing).'),
+  W('Agile', '+1', 'Use Dex instead of Str on damage rolls (light/finesse weapon with Weapon Finesse).'), W('Furious', '+1', '+2 enhancement while the wielder rages.'),
+  W('Menacing', '+1', 'Flanking bonus becomes +4.'), W('Vicious', '+1', '+2d6 damage, and the wielder takes 1d6.'), W('Spell Storing', '+1', 'Stores one spell of up to 3rd level.'),
+];
+export const PF_ARMOR_SPECIALS = [
+  W('Fortification (light)', '+1', '25% chance to negate critical hits and sneak attacks.'), W('Fortification (moderate)', '+3', '50% chance to negate critical hits and sneak attacks.'),
+  W('Fortification (heavy)', '+5', '75% chance to negate critical hits and sneak attacks.'),
+  W('Shadow', '+3,750', '+5 competence bonus on Stealth checks.', { mods: [{ target: 'skill:Stealth', value: 5, type: 'competence' }] }),
+  W('Shadow, improved', '+15,000', '+10 competence bonus on Stealth checks.', { mods: [{ target: 'skill:Stealth', value: 10, type: 'competence' }] }),
+  W('Slick', '+3,750', '+5 competence bonus on Escape Artist checks.', { mods: [{ target: 'skill:Escape Artist', value: 5, type: 'competence' }] }),
+  W('Slick, improved', '+15,000', '+10 competence bonus on Escape Artist checks.', { mods: [{ target: 'skill:Escape Artist', value: 10, type: 'competence' }] }),
+  W('Spell Resistance (13)', '+2', 'Spell resistance 13.', { sr: 13 }), W('Spell Resistance (15)', '+3', 'Spell resistance 15.', { sr: 15 }),
+  W('Spell Resistance (17)', '+4', 'Spell resistance 17.', { sr: 17 }), W('Spell Resistance (19)', '+5', 'Spell resistance 19.', { sr: 19 }),
+  W('Energy Resistance', '+18,000', 'Resist 10 against one energy type.', { resist: 10 }), W('Energy Resistance, improved', '+42,000', 'Resist 20 against one energy type.', { resist: 20 }),
+  W('Energy Resistance, greater', '+66,000', 'Resist 30 against one energy type.', { resist: 30 }),
+  W('Invulnerability', '+3', 'DR 5/magic.', { dr: '5/magic' }), W('Ghost Touch', '+3', 'Armor bonus counts against incorporeal touch attacks.'),
+  W('Glamered', '+2,700', 'Can look like normal clothing.'), W('Light Fortification', '+1', '25% chance to negate critical hits.'),
+  W('Bashing', '+1', 'Shield bash deals damage as a shield two sizes larger and +1 bonus.'), W('Arrow Catching', '+1', '+1 deflection AC against ranged attacks.', { mods: [{ target: 'ac', value: 1, type: 'deflection', cond: 'vs. ranged attacks' }] }),
+  W('Arrow Deflection', '+2', 'Deflects one ranged attack per round.'), W('Animated', '+2', 'The shield floats and protects without being held.'),
+  W('Reflecting', '+5', 'Reflects a spell back once per day.'), W('Determination', '+30,000', 'Breath of life once per day.'),
+];
+export function specialsFor(system, items = {}) {
+  if (system === 'pf1e') return { weapon: PF_WEAPON_SPECIALS, armor: PF_ARMOR_SPECIALS };
+  return { weapon: items.weaponSpecials || [], armor: items.armorSpecials || [] };
+}
+
 // ------------------------------------------------------------------ special materials (PF1e core + FFd20)
 // weapon: cost(a) extra price, mw = counts as masterwork, dmg = damage modifier, rider(a) = extra damage text
 // armor:  cost(type) extra price, maxDex/acp changes, lighter = counts as one category lighter, dr = DR n/— by type
@@ -176,7 +218,8 @@ export function emptyEquipment() {
 // Builds the "Combat Gear" / "Other Gear" strings and the total value.
 export function gearSummary(d, db) {
   const eq = d.equipment || emptyEquipment();
-  const items = db?.items || {};
+  const sp = specialsFor(d.system, db?.items || {});
+  const items = { ...(db?.items || {}), weaponSpecials: sp.weapon, armorSpecials: sp.armor };
   const other = [];
   let total = 0;
   for (const a of d.attacks || []) {
