@@ -15,7 +15,7 @@ const db = {
   classesById: Object.fromEntries([...ff, ...pf].map((c) => [c.id, c])),
   racesById: Object.fromEntries([...load('races.json'), ...load('pf-races.json')].map((r) => [r.id, r])),
   homebrew: {}, talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
-  items: load('items.json'), feats: load('feats.json'), pathsByClass: pfPaths,
+  items: load('items.json'), feats: load('feats.json'), pathsByClass: pfPaths, spellsKnown: load('pf-spells-known.json'),
 };
 db.talentsByClass = { ...db.talentsByClass, ...pfTalents };
 let passed = 0;
@@ -380,6 +380,28 @@ t('full PF weapon/armor lists and special materials', () => {
   const fp = ARMORS.find((x) => x.name === 'full plate');
   d.equipment.armor = { ...fp, enh: 0, specials: [], material: 'horacalcum' };
   assert.equal(compute(d, db).init, 3 + 3);
+});
+
+t('spell budget: how many spells a caster may pick at its level', () => {
+  const run = (system, classId, level, abilities = {}, spells = []) => {
+    const d = npc(system, classId, level, { abilities: { str: 10, dex: 12, con: 12, int: 16, wis: 14, cha: 16, ...abilities } });
+    d.caster = { ...d.caster, spells: spells.map(([name, lv], i) => ({ id: `s${i}`, name, level: lv })) };
+    return compute(d, db);
+  };
+  const rows = (c) => Object.fromEntries(c.spellBudget[0].rows.map((r) => [r.level, r.limit]));
+  // PF spontaneous: the class's spells known table (sorcerer 7: 7/5/3/2)
+  assert.deepEqual(rows(run('pf1e', 'pf-sorcerer', 7)), { 0: 7, 1: 5, 2: 3, 3: 2 });
+  // PF prepared: spells per day + Int bonus (wizard 7, Int 16)
+  assert.deepEqual(rows(run('pf1e', 'pf-wizard', 7)), { 0: 4, 1: 5, 2: 4, 3: 3, 4: 1 });
+  // FFd20 black mage 5, Int 16: 3 + Int 3 + 2/level after 1st = 14; cantrips 4 + 1 every 3 levels = 5
+  assert.deepEqual(rows(run('ffd20', 'black-mage', 5)), { 0: 5, all: 14 });
+  // black mage 12: + New Arcana at 7th and 12th
+  assert.equal(rows(run('ffd20', 'black-mage', 12)).all, 3 + 3 + 22 + 2);
+  // scholar: black and white magic, Int and Wis
+  assert.equal(rows(run('ffd20', 'scholar', 5)).all, 2 + 2 + 3 + 2 + 4 * 4);
+  // too many → warning, like feats
+  const c = run('pf1e', 'pf-sorcerer', 1, {}, [['magic missile', 1], ['shield', 1], ['sleep', 1]]);
+  assert.ok(c.warnings.some((w) => /Magias de 1º nível \(Sorcerer\): 3 escolhidas, limite 2/.test(w)), c.warnings.join('; '));
 });
 
 console.log(`${passed} class-effect tests passed`);

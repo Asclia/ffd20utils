@@ -13,7 +13,7 @@ const db = {
   classesById: Object.fromEntries([...ffClasses, ...pfClasses].map((c) => [c.id, c])),
   racesById: Object.fromEntries([...load('races.json'), ...load('pf-races.json')].map((r) => [r.id, r])),
   homebrew: {}, talentsByClass: load('talents.json'), archetypesById: Object.fromEntries(archetypes.map((a) => [a.id, a])),
-  items: load('items.json'), feats: load('feats.json'), spells,
+  items: load('items.json'), feats: load('feats.json'), spells, spellsKnown: load('pf-spells-known.json'),
 };
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('ok -', name); };

@@ -1,7 +1,7 @@
 // Automatic NPC build: fills abilities, skills, feats, spells and equipment from the race, the classes and a
 // combat role, following the FFd20 "Creating NPCs" guidelines (ability arrays, NPC gear by level) and PF1e rules.
 // Everything it writes stays editable; each part can be rebuilt on its own.
-import { compute, newAttack } from './engine.js';
+import { compute, newAttack, ffSpellRule } from './engine.js';
 import { NPC_ARRAYS, npcGear, PC_WEALTH, mod, scaleDiceForSize } from './tables.js';
 import { WEAPONS } from './presets.js';
 import { ARMORS, SHIELDS, classicItems, makeItem } from './equipment.js';
@@ -205,12 +205,6 @@ export function buildFeats(def, c, role, ctx = {}) {
 }
 
 // ------------------------------------------------------------------ spells
-const SORC_KNOWN = [[4, 2], [5, 2], [5, 3], [6, 3, 1], [6, 4, 2], [7, 4, 2, 1], [7, 5, 3, 2], [8, 5, 3, 2, 1], [8, 5, 4, 3, 2], [9, 5, 4, 3, 2, 1],
-  [9, 5, 5, 4, 3, 2], [9, 5, 5, 4, 3, 2, 1], [9, 5, 5, 4, 4, 3, 2], [9, 5, 5, 4, 4, 3, 2, 1], [9, 5, 5, 4, 4, 4, 3, 2], [9, 5, 5, 4, 4, 4, 3, 2, 1],
-  [9, 5, 5, 4, 4, 4, 3, 3, 2], [9, 5, 5, 4, 4, 4, 3, 3, 2, 1], [9, 5, 5, 4, 4, 4, 3, 3, 3, 2], [9, 5, 5, 4, 4, 4, 3, 3, 3, 3]];
-const BARD_KNOWN = [[4, 2], [5, 3], [6, 4], [6, 4, 2], [6, 4, 3], [6, 4, 4], [6, 5, 4, 2], [6, 5, 4, 3], [6, 5, 4, 4], [6, 5, 5, 4, 2],
-  [6, 6, 5, 4, 3], [6, 6, 5, 4, 4], [6, 6, 5, 5, 4, 2], [6, 6, 6, 5, 4, 3], [6, 6, 6, 5, 4, 4], [6, 6, 6, 5, 5, 4, 2], [6, 6, 6, 6, 5, 4, 3],
-  [6, 6, 6, 6, 5, 4, 4], [6, 6, 6, 6, 5, 5, 4], [6, 6, 6, 6, 6, 5, 5]];
 const USEFUL = /damage|deals?|cure|heal|restor|protect|bonus|haste|slow|paraly|stun|sleep|confus|blind|silence|summon|dispel|fear|charm|hold|barrier|shield|resist|invisib|fly|teleport|raise|revive|poison|drain|weaken|entangle|bless/i;
 const SPELL_LIST_OF = { scholar: ['black-mage', 'white-mage'], 'lil-witch': ['black-mage', 'white-mage'], cleric: ['cleric', 'white-mage'] };
 
@@ -239,30 +233,30 @@ export function buildSpells(def, c, db, seed = 1) {
     if (!pool.length) continue;
     const byLv = (L) => pool.filter((s) => s.level === L);
     const prefer = /white|cleric|medic|druid|astrolog|wis/.test(id) || cl.def.castingAbility === 'wis' ? /cure|heal|restor|protect|bless/i : /damage|deals?/i;
+    // the same limits the Magic section shows (c.spellBudget): PF spells known / per day, FFd20 spells known
+    const b = (c.spellBudget || []).find((x) => x.classId === id);
+    if (!b) continue;
+    const tag = !ff || c.classes.filter((x) => x.def.caster).length > 1 ? id : undefined;
     if (ff) {
-      // FFd20: starts with 3 (+ casting mod) 1st-level spells, then 2 per level of spells it can cast
-      const feat = (cl.def.features || []).find((f) => f.name === 'Spells')?.text || '';
-      const start = Number((feat.match(/begins play with (\d+)/i) || [])[1]) || 3;
-      const per = { one: 1, two: 2, three: 3 }[(feat.match(/gains (one|two|three) spells/i) || [])[1]] || 2;
-      const am = Math.max(0, mod(c.abilities[cl.def.castingAbility] ?? 10));
-      const known = {};
-      known[1] = start + am;
-      for (let lv = 2; lv <= cl.level; lv++) {
+      const rule = ffSpellRule(cl.def) || { start: 3, perLevel: 2 };
+      const cantrips = b.rows.find((x) => x.level === 0)?.limit ?? 4;
+      const total = b.rows.find((x) => x.level === 'all')?.limit ?? (rule.start + 2 * (cl.level - 1)); // blue mage: no fixed limit
+      // the starting spells are 1st level; every later level adds one of the newest spell level, the rest lower
+      const known = { 1: Math.min(total, total - (rule.perLevel || 2) * Math.max(0, cl.level - (rule.startLevel || 1))) };
+      for (let lv = (rule.startLevel || 1) + 1; lv <= cl.level; lv++) {
         const maxL = cl.def.levels[lv - 1]?.spellLevel || 1;
         known[maxL] = (known[maxL] || 0) + 1;
-        const lower = maxL > 1 ? 1 + Math.floor(r() * (maxL - 1)) : 1;
-        known[lower] = (known[lower] || 0) + (per - 1);
+        for (let k = 1; k < (rule.perLevel || 2); k++) { const lower = maxL > 1 ? 1 + Math.floor(r() * (maxL - 1)) : 1; known[lower] = (known[lower] || 0) + 1; }
       }
-      add(choose(byLv(0), 4, r, prefer), 4);
-      for (const [L, n] of Object.entries(known)) add(choose(byLv(Number(L)), n, r, prefer), n);
+      let left = total - Object.values(known).reduce((a, x) => a + x, 0); // New Arcana etc.
+      while (left-- > 0) { const L = 1 + Math.floor(r() * Math.max(1, b.maxSL)); known[L] = (known[L] || 0) + 1; }
+      if (byLv(0).length) add(choose(byLv(0), cantrips, r, prefer), cantrips, tag);
+      for (const [L, n] of Object.entries(known)) add(choose(byLv(Number(L)), n, r, prefer), n, tag);
     } else {
-      const ps = (c.pfSpells || []).find((p) => p.classId === id);
-      if (!ps) continue;
-      const table = ps.spontaneous ? (ps.maxSL >= 7 || cl.def.levels.some((x) => x.spellsPerDay?.['7']) ? SORC_KNOWN : cl.def.levels.some((x) => x.spellsPerDay?.['6']) ? BARD_KNOWN : null) : null;
-      for (let L = 0; L <= ps.maxSL; L++) {
-        let n = table ? (table[Math.min(19, cl.level - 1)][L] || 0) : L === 0 ? 4 : (ps.perDay[L] || 0);
-        if (L === 0 && !byLv(0).length) n = 0;
-        add(choose(byLv(L), n, r, prefer), n, id);
+      for (const row of b.rows) {
+        let n = row.limit ?? (row.level === 0 ? 4 : row.perDay || 0);
+        if (row.level === 0 && !byLv(0).length) n = 0;
+        add(choose(byLv(row.level), n, r, prefer), n, tag);
       }
     }
   }

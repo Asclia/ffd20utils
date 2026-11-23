@@ -45,7 +45,7 @@ export function Editor({ app, mode, def, setDef, onSave, onSaveCopy, onNew, dirt
       <input class="ed-name" value=${def.name} onInput=${(e) => up({ name: e.target.value })} placeholder="Nome" />
       <span class="cr-pill">CR ${crLabel(c.cr)}</span>
       <div class="seg system-seg" title="Sistema de regras desta criatura">${Object.entries(SYSTEMS).map(([k, l]) => html`<button class=${(def.system || 'ffd20') === k ? 'on' : ''}
-        onClick=${() => (def.system || 'ffd20') !== k && up({ system: k, classes: def.classes.filter((x) => (k === 'pf1e') === String(x.classId).startsWith('pf-')), raceId: '' })}>${l}</button>`)}</div>
+        onClick=${() => (def.system || 'ffd20') !== k && up({ system: k, classes: def.classes.filter((x) => (k === 'pf1e') === String(x.classId).startsWith('pf-')), raceId: '', caster: { ...def.caster, spells: (def.caster?.spells || []).filter((x) => !x.classId || (k === 'pf1e') === String(x.classId).startsWith('pf-')) } })}>${l}</button>`)}</div>
       ${dirty ? html`<span class="unsaved">● alterações não salvas</span>` : inLibrary ? html`<span class="saved">✓ salvo na biblioteca</span>` : html`<span class="muted small">novo (ainda não salvo)</span>`}
       <div class="spacer"></div>
       <button class="btn primary" onClick=${onSave} title="Ctrl+S">Salvar</button>
@@ -689,6 +689,21 @@ function SkillsSection({ def, up, c, npc }) {
 }
 
 // ------------------------------------------------------------------ magic
+// how many spells the caster may pick at its level (like the feat count): per spell level for PF, total for FFd20
+const lvName = (lv) => (lv === 'all' ? 'nível 1+' : Number(lv) === 0 ? 'truques (0)' : `${lv}º nível`);
+function SpellBudget({ budget }) {
+  if (!budget?.length) return null;
+  const cls = (r) => (r.limit === null ? '' : r.chosen > r.limit ? 'over' : r.chosen === r.limit ? 'full' : 'left');
+  return html`<div class="spell-budget">${budget.map((b) => html`<div class="sbud">
+    <div class="sbud-head"><b>${b.source}</b> <span class="muted small">${b.kind === 'prepared' ? 'preparadas por dia (com bônus de atributo' + ')' + (b.domainSlot ? ' + 1 magia de domínio por nível, já incluída automaticamente' : '')
+      : b.kind === 'known' ? (b.noTable ? 'espontâneo — sem tabela de magias conhecidas' : 'magias conhecidas')
+      : b.open ? 'aprende magias de criaturas (sem limite fixo)' : `magias conhecidas (+${b.perLevel} por nível)`} · nível máximo ${b.maxSL ? `${b.maxSL}º` : '—'}</span></div>
+    <div class="sbud-rows">${b.rows.map((r) => html`<span class="sbud-cell ${cls(r)}" title=${r.limit === null ? '' : r.chosen > r.limit ? `${r.chosen - r.limit} a mais` : r.chosen < r.limit ? `faltam ${r.limit - r.chosen}` : 'completo'}>
+      <span class="lv">${lvName(r.level)}</span> <b>${r.chosen}${r.limit === null ? '' : `/${r.limit}`}</b>${r.perDay !== null && r.perDay !== undefined && b.kind === 'known' && r.level !== 0 ? html` <span class="muted">(${r.perDay}/dia)</span>` : null}</span>`)}</div>
+    ${b.beyondMax ? html`<div class="warn small">${b.beyondMax} magia(s) acima do nível máximo que ${b.source} consegue conjurar.</div>` : null}
+  </div>`)}</div>`;
+}
+
 function MagicSection({ def, up, upIn, c, db, npc }) {
   const casterClasses = c.classes.filter((x) => x.def.caster).map((x) => x.def.id);
   const pfSys = def.system === 'pf1e';
@@ -696,7 +711,9 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
   const spellLists = [...new Set(sysSpells.map((s) => s.class))].sort();
   if (pfSys && def.caster?.pfClass && !casterClasses.includes(def.caster.pfClass)) casterClasses.push(def.caster.pfClass);
   const defaultList = casterClasses.map((id) => SPELL_LIST_OF[id] || id).flat().find((x) => spellLists.includes(x)) || '__all';
-  const [list, setList] = useState(defaultList);
+  // follows the caster classes until the user picks a list by hand
+  const [listSel, setList] = useState(null);
+  const list = listSel && (listSel.startsWith('__') || spellLists.includes(listSel)) ? listSel : defaultList;
   const [lvFilter, setLvFilter] = useState('');
   const [custom, setCustom] = useState({ name: '', level: 1 });
   const maxSL = c.mp.maxSL;
@@ -712,7 +729,7 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
     return sysSpells.filter((s) => (!ids || ids.includes(s.class)) && !seen.has(s.name + s.level) && seen.add(s.name + s.level));
   }, [sysSpells, list, casterClasses.join()]);
   const pfCasters = db.classes.filter((x) => x.system === 'pf1e' && x.caster);
-  if (pfSys) return html`<${Section} title="Magia (magias por dia)" id="magic" badge=${c.pfSpells?.length ? c.pfSpells.map((p) => `${p.source} ${p.cl}`).join(' / ') : ''} open=${!!c.pfSpells?.length}>
+  if (pfSys) return html`<${Section} title="Magia (magias por dia)" id="magic" badge=${c.spellBudget?.length ? c.spellBudget.map((b) => `${b.rows.reduce((a, r) => a + r.chosen, 0)}/${b.rows.some((r) => r.limit === null) ? '—' : b.rows.reduce((a, r) => a + r.limit, 0)}`).join(' · ') : ''} open=${!!c.pfSpells?.length}>
     <div class="grid">
       <${Field} label="Conjura como (monstro)" hint="Ex.: um monstro que 'conjura como um sorcerer de 7º nível' (PF1e). Classes do NPC já contam sozinhas.">
         <${Select} value=${def.caster.pfClass || ''} onChange=${(v) => upIn('caster', { pfClass: v, pfLevel: v ? (def.caster.pfLevel || c.hd || 1) : 0 })}
@@ -724,6 +741,7 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
       <div class="small muted">Já inclui as magias bônus pelo atributo de conjuração.</div></div>`
     : html`<div class="muted small">Sem magias. Adicione uma classe conjuradora ou escolha "Conjura como".</div>`}
     <h4>Magias ${c.pfSpells?.some((p) => !p.spontaneous) ? 'preparadas / conhecidas' : 'conhecidas'}</h4>
+    <${SpellBudget} budget=${c.spellBudget} />
     ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => { const si = (db.spellInfo || {})[s.name]; return html`<span class="chip" title=${si ? `${si.school} · ${si.castingTime} · ${si.range}${si.save ? ` · save ${si.save}` : ''}${si.sr ? ` · SR ${si.sr}` : ''}\n\n${si.text.slice(0, 600)}` : ''}>${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`; })}</div>`)}
     <div class="row wrap">
       <${Select} value=${list} onChange=${setList} options=${[...(casterClasses.length ? [['__mine', 'Listas das minhas classes']] : []), ['__all', 'Todas as listas'], ...spellLists.map((x) => [x, `Lista: ${x.replace(/^pf-/, '').replace(/-/g, ' ')}`])]} />
@@ -737,7 +755,7 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
     <${ListEditor} items=${def.caster.sla || []} onChange=${(v) => upIn('caster', { sla: v })} addLabel="+ SLA" onAdd=${() => upIn('caster', { sla: [...(def.caster.sla || []), { id: uid(), freq: 'At will', name: '' }] })}
       render=${(s, set) => html`<div class="row"><input type="text" class="w-freq" value=${s.freq} onInput=${(e) => set({ freq: e.target.value })} placeholder="At will / 3/day" /><input type="text" value=${s.name} onInput=${(e) => set({ name: e.target.value })} placeholder="magia (DC 15)" /></div>`} />
   </${Section}>`;
-  return html`<${Section} title="Magia (MP)" id="magic" badge=${c.mp.total ? `${c.mp.total} MP` : ''} open=${!!c.mp.total}>
+  return html`<${Section} title="Magia (MP)" id="magic" badge=${c.mp.total ? `${c.mp.total} MP${c.spellBudget?.length ? ` · ${c.spellBudget.map((b) => `${b.rows.reduce((a, r) => a + r.chosen, 0)}/${b.open ? '—' : b.rows.reduce((a, r) => a + (r.limit || 0), 0)}`).join(' · ')} magias` : ''}` : ''} open=${!!c.mp.total}>
     <div class="grid">
       <${Field} label="Conjurador (monstro)" hint="Tabela Creature MP Chart do FFd20. Criaturas com classes conjuradoras usam o MP da classe.">
         <${Select} value=${def.caster.tier} onChange=${(v) => upIn('caster', { tier: v })} options=${Object.entries(CASTER_TIERS)} /></${Field}>
@@ -749,11 +767,12 @@ function MagicSection({ def, up, upIn, c, db, npc }) {
     ${c.mp.parts.length ? html`<div class="mp-break">${c.mp.parts.map((p) => html`<div>${p.source}: ${p.base} MP + ${p.bonus} bônus (${p.ability.toUpperCase()} ${c.abilities[p.ability] ?? '—'}, magia máx. ${p.sl ? ordinal(p.sl) : '—'})</div>`)}
       <div><b>Total: ${c.mp.total} MP</b> · CL ${c.cl} · concentração ${sign(c.concentration)} · CD base 10 + nível ${sign(c.spellDCBase - 10)}</div></div>` : html`<div class="muted small">Sem MP. Escolha um tipo de conjurador ou adicione uma classe conjuradora.</div>`}
     <h4>Magias conhecidas</h4>
+    <${SpellBudget} budget=${c.spellBudget} />
     ${Object.keys(byLevel).sort((a, b) => b - a).map((lv) => html`<div class="spell-level"><b>${lv === '0' ? '0' : ordinal(Number(lv))}:</b> ${byLevel[lv].map((s) => html`<span class="chip">${s.name}<button onClick=${() => removeSpell(s.id)}>×</button></span>`)}</div>`)}
     <div class="row wrap">
       <${Select} value=${list} onChange=${setList} options=${[...(casterClasses.length ? [['__mine', 'Listas das minhas classes']] : []), ['__all', 'Todas as listas'], ...spellLists.map((x) => [x, `Lista: ${x.replace(/-/g, ' ')}`])]} />
       <${Select} value=${lvFilter} onChange=${setLvFilter} options=${[['', 'todos os níveis'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), `nível ${l}`])]} />
-      ${maxSL ? html`<span class="muted small">Nível máximo: ${ordinal(maxSL)}</span>` : null}
+      ${maxSL ? html`<span class="muted small">Nível máximo: ${maxSL}º</span>` : null}
     </div>
     <${SearchPicker} items=${items} getText=${(s) => s.name} onPick=${addSpell} placeholder="Buscar magia…"
       filter=${(s) => (lvFilter === '' || s.level === Number(lvFilter)) && (!maxSL || s.level <= maxSL || lvFilter !== '')}

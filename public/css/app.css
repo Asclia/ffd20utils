@@ -558,3 +558,13 @@ input[type=color] { width: 44px; height: 30px; padding: 0 2px; border: 1px solid
 @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
 .dg-canvas-wrap canvas:not(.tool-select) { touch-action: none; }
 .weapon-pick { flex: 1 1 320px; min-width: 0; max-width: 520px; }
+/* spell budget (how many spells the caster may pick) */
+.spell-budget { display: grid; gap: 6px; margin: 4px 0 10px; }
+.sbud { background: var(--bg2); border-radius: 6px; padding: 6px 10px; }
+.sbud-head { font-size: 13px; margin-bottom: 4px; }
+.sbud-rows { display: flex; flex-wrap: wrap; gap: 4px; }
+.sbud-cell { font-size: 12.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+.sbud-cell .lv { color: var(--muted); }
+.sbud-cell.full { border-color: var(--ok); }
+.sbud-cell.over { border-color: var(--danger); color: var(--danger); }
+.sbud-cell.left b { color: var(--accent); }

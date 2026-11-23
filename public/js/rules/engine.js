@@ -452,6 +452,8 @@ export function compute(def, db) {
     mp.total += resolveMods(mods.filter((x) => x.target === 'mp'));
   }
   out.mp = mp;
+  out.spellBudget = spellBudget(d, out.pfSpells, pf ? [] : classes, abil, db);
+  for (const b of out.spellBudget) for (const r of b.rows) if (r.limit !== null && r.chosen > r.limit) out.warnings.push(`Magias${b.rows.length > 1 ? ` de ${r.level === 'all' ? 'nível 1+' : r.level === 0 ? 'nível 0' : `${r.level}º nível`}` : ''} (${b.source}): ${r.chosen} escolhidas, limite ${r.limit}.`);
   const castAbility = mp.parts[0]?.ability || d.caster?.ability || 'int';
   const dcBonus = resolveMods(mods.filter((x) => x.target === 'spellDC'));
   const concBonus = resolveMods(mods.filter((x) => x.target === 'concentration'));
@@ -1090,4 +1092,71 @@ export function crAnalysis(def, c) {
   cmp('Melhor save', saves[0], t.goodSave, 2);
   cmp('Pior save', saves[2], t.poorSave, 2);
   return { target: t, rows };
+}
+
+// ------------------------------------------------------------------ how many spells a caster may pick
+// PF1e: prepared casters → spells per day (with ability bonus and the domain slot); spontaneous casters → the class's
+// "Spells Known" table. FFd20: each class says it in text ("begins play with 3 1st-level spells… plus his Intelligence
+// modifier… gains two spells each level"; cantrips: "begin with 4 0-level spells and gain one every three levels").
+const WORDN = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+const wn = (x) => (Number(x) || WORDN[String(x).toLowerCase()] || 0);
+const ABIL_WORD = { intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+export function ffSpellRule(cls) {
+  const feats = cls.features || [];
+  const all = feats.map((f) => ({ f, t: String(f.text || '') }));
+  const main = all.find(({ t }) => /begins? play (?:with|knowing) (\w+) (?:1st|first)[- ]level/i.test(t));
+  const rule = { start: 0, startLevel: 1, perLevel: 0, abilities: [], cantrips: null, extraLevels: [], open: false };
+  if (main) {
+    const t = main.t;
+    // the first class level with spells (the feature's own level can be wrong: "Cha 12 for 2nd-level spells")
+    rule.startLevel = (cls.levels || []).find((r) => (r.spellLevel || 0) > 0 || r.mp > 0)?.level || main.f.level || 1;
+    rule.start = [...t.matchAll(/(?:begins? play (?:with|knowing)|and) (\w+) (?:1st|first)[- ]level/gi)].reduce((a, m) => a + wn(m[1]), 0);
+    rule.abilities = [...t.matchAll(/equal to (?:his|her|their|its) (intelligence|wisdom|charisma) modifier/gi)].map((m) => ABIL_WORD[m[1].toLowerCase()]);
+    const per = /(?:each|every) time [^.]*?attains? a new [^.]*?level, (?:he|she|they|it) gains? ([^.]*?) (?:of (?:his|her|their) choice )?to add/i.exec(t);
+    if (per) rule.perLevel = [...per[1].matchAll(/\b(\d+|one|two|three|four)\b/gi)].reduce((a, m) => a + wn(m[1]), 0);
+    if (/learn(?:s|ing)? (?:new spells )?from (?:creatures|monsters)|gain new spells from creatures/i.test(t)) rule.open = true;
+  }
+  for (const { f, t } of all) {
+    const c = /begins? with (\w+) 0-level spells?[^.]*?(?:gains?|learns?) an additional 0-level spell every (\w+) levels/i.exec(t);
+    if (c && !rule.cantrips) rule.cantrips = { start: wn(c[1]), every: wn(c[2]) };
+    // "New Arcana": add one spell at 7th, and one more at 12th and 17th level
+    if (/add (?:any )?one (?:\w+ )?spells? from the [\w ]+ list to (?:his|her|their) list of spells known/i.test(t)) {
+      rule.extraLevels.push(f.level || 1, ...[...t.slice(t.search(/additional spell/i)).matchAll(/(\d+)(?:st|nd|rd|th)/g)].map((m) => Number(m[1])));
+    }
+  }
+  return main ? rule : null;
+}
+
+function spellBudget(d, pfSpells, ffClasses, abil, db) {
+  const spells = d.caster?.spells || [];
+  const out = [];
+  if (pfSpells.length) {
+    pfSpells.forEach((p, i) => {
+      const mine = spells.filter((x) => (x.classId ? x.classId === p.classId : i === 0) || pfSpells.length === 1);
+      const table = (db.spellsKnown || {})[p.classId];
+      const known = p.spontaneous && table ? table[Math.min(p.cl, table.length) - 1] || {} : null;
+      const levels = [...new Set([...Object.keys(p.perDay), ...Object.keys(known || {})])].map(Number).sort((a, b) => a - b);
+      const rows = levels.map((lv) => {
+        const limit = known ? (known[lv] ?? 0) : (p.perDay[lv] ?? 0); // the domain slot is filled with the domain spell automatically
+        return { level: lv, limit: p.spontaneous && !known ? null : limit, perDay: p.perDay[lv] ?? null, chosen: mine.filter((x) => Number(x.level) === lv).length };
+      });
+      const over = mine.filter((x) => Number(x.level) > p.maxSL).length;
+      out.push({ source: p.source, classId: p.classId, kind: p.spontaneous ? 'known' : 'prepared', rows, maxSL: p.maxSL, beyondMax: over, domainSlot: !!p.domainSlot, noTable: p.spontaneous && !known });
+    });
+    return out;
+  }
+  const ffMods = (k) => (abil[k] === null || abil[k] === undefined ? 0 : Math.floor((abil[k] - 10) / 2));
+  ffClasses.filter((c) => c.def.caster).forEach((c, i, arr) => {
+    const rule = ffSpellRule(c.def);
+    if (!rule) return;
+    const L = Number(c.level);
+    const row = c.def.levels[Math.min(L, c.def.levels.length) - 1] || {};
+    const maxSL = row.spellLevel || 0;
+    const mine = spells.filter((x) => (x.classId ? x.classId === c.def.id : i === 0) || arr.length === 1);
+    const total = L < rule.startLevel ? 0 : rule.start + rule.abilities.reduce((a, k) => a + Math.max(0, ffMods(k)), 0) + rule.perLevel * (L - rule.startLevel) + rule.extraLevels.filter((x) => x <= L).length;
+    const rows = [{ level: 'all', limit: rule.open ? null : total, chosen: mine.filter((x) => Number(x.level) > 0).length }];
+    if (rule.cantrips) rows.unshift({ level: 0, limit: rule.cantrips.start + Math.floor((L - 1) / (rule.cantrips.every || 99)), chosen: mine.filter((x) => Number(x.level) === 0).length });
+    out.push({ source: c.def.name, classId: c.def.id, kind: 'ff', rows, maxSL, beyondMax: mine.filter((x) => Number(x.level) > maxSL).length, open: rule.open, perLevel: rule.perLevel, total });
+  });
+  return out;
 }
