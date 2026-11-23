@@ -216,7 +216,8 @@ function ClassesSection({ def, up, db, c, npc, homebrew }) {
   const add = () => up({ classes: [...def.classes, { id: uid(), classId: sys === 'pf1e' ? 'pf-fighter' : 'warrior', level: 1 }] });
   return html`<${Section} title=${npc ? 'Classes e CR' : 'Níveis de classe'} id="classes" badge=${c.classLevels ? `${c.classLevels} níveis` : ''} open=${npc || def.classes.length > 0}>
     ${npc ? null : html`<div class="muted small">Monstros com níveis de classe (ex.: um outsider guerreiro): os níveis somam aos HD raciais — BAB, saves, PV, perícias, feats, magias e características de classe entram sozinhos.
-      O CR sobe +1 por nível de <b>classe-chave</b> (que combina com o monstro) e +1 a cada 2 níveis nas outras.</div>`}
+      O CR sobe +1 por nível de <b>classe-chave</b> (que combina com o monstro) e +1 a cada 2 níveis nas outras.
+      ${c.racialHDReplaced ? html`<br /><b>O HD racial (1) foi substituído pelos níveis de classe</b> (criaturas com 1 HD ou menos trocam o HD racial pelos níveis).` : null}</div>`}
     <${ListEditor} items=${def.classes} onChange=${(v) => up({ classes: v })} addLabel="+ Classe" onAdd=${add}
       empty=${npc ? 'Adicione ao menos uma classe.' : 'Monstros normalmente não têm classes; adicione se quiser um monstro com níveis de classe.'}
       render=${(it, set) => {
@@ -540,7 +541,7 @@ function OffenseSection({ def, up, upIn, c }) {
           <label class="inline">atrib. dano <${Select} value=${a.dmgAbility} onChange=${(v) => set({ dmgAbility: v })} options=${[['auto', 'auto'], ['str', 'For'], ['dex', 'Des'], ['cha', 'Car (swordskill)'], ['none', 'nenhum']]} /></label>
         </div>
         <div class="row wrap">
-          ${!a.natural ? html`<${Check} label="leve" checked=${a.light} onChange=${(v) => set({ light: v })} /><${Check} label="finesse" checked=${a.finesse} onChange=${(v) => set({ finesse: v })} />` : null}
+          ${!a.natural ? html`<${Check} label="leve" checked=${a.light} onChange=${(v) => set({ light: v })} /><span title="Arma que funciona com Weapon Finesse sem ser leve (rapier, whip, spiked chain, elven curve blade…). Armas leves já contam; sem Weapon Finesse (ou Finesse Training) não muda nada."><${Check} label="finesse" checked=${a.finesse} onChange=${(v) => set({ finesse: v })} /></span>` : null}
           ${a.kind === 'ranged' ? html`<${Check} label="arremesso (For no dano)" checked=${a.thrown} onChange=${(v) => set({ thrown: v })} />` : null}
           <${Check} label="toque" checked=${a.touch} onChange=${(v) => set({ touch: v })} />
           ${!a.natural ? html`<${Check} label="iterativos" checked=${a.iterative !== false} onChange=${(v) => set({ iterative: v })} />` : null}

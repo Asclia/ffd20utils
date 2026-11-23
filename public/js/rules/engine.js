@@ -182,7 +182,10 @@ export function compute(def, db) {
     .map((c) => withArchetypeCasting(c, classesDB));
   const classLevels = classes.reduce((s, c) => s + Number(c.level), 0);
   // Monsters: Hit Dice follow the PF1e "HD by type and CR" table unless the user typed a value
-  const racialHD = d.mode !== 'npc' && d.autoHD && d.cr !== null && d.cr !== undefined ? suggestedHD(type.id, Number(d.cr)) : Math.max(0, Number(d.racialHD) || 0);
+  const racialHD0 = d.mode !== 'npc' && d.autoHD && d.cr !== null && d.cr !== undefined ? suggestedHD(type.id, Number(d.cr)) : Math.max(0, Number(d.racialHD) || 0);
+  // Bestiary: "creatures with 1 or fewer HD replace their monster level with their character levels"
+  const racialHD = racialHD0 <= 1 && classLevels > 0 ? 0 : racialHD0;
+  out.racialHDReplaced = racialHD0 === 1 && racialHD === 0;
   const hd = racialHD + classLevels;
   out.hd = hd; out.racialHD = racialHD; out.classLevels = classLevels; out.classes = classes;
   const hdDie = (isBossTier && d.bossD12) ? 12 : (d.hdDie || flags.hdDie || type.hd);
@@ -570,6 +573,16 @@ export function compute(def, db) {
   const groups = {};
   for (const a of d.attacks || []) (groups[a.group || 1] = groups[a.group || 1] || []).push(a);
   out.attacks = { melee: [], ranged: [] };
+  const graceFeats = (d.feats || []).map((f) => ({ k: featKey(f.name), p: String(f.param || '').toLowerCase().trim() }));
+  const hasFeat = (k) => graceFeats.find((f) => f.k === k);
+  const dexDamageFor = (a) => {
+    const n = String(a.name || '').toLowerCase();
+    if (featFlags.dexDamage && (a.light || a.finesse)) return true;
+    if (hasFeat('fencing grace') && /rapier/.test(n)) return true;
+    if (hasFeat('dervish dance') && /scimitar/.test(n)) return true;
+    const sg = hasFeat('slashing grace');
+    return !!(sg && sg.p && n.includes(sg.p));
+  };
   out.attackDetails = [];
   for (const [g, list] of Object.entries(groups).sort((a, b) => a[0] - b[0])) {
     for (const kind of ['melee', 'ranged']) {
@@ -595,7 +608,10 @@ export function compute(def, db) {
         else if (a.hands === 'two' || singleNatural) dmgMult = 1.5;
         else if ((a.hands === 'off' && !featFlags.doubleSlice) || secondary) dmgMult = 0.5;
         if (a.dmgMult !== undefined && a.dmgMult !== '' && a.dmgMult !== null && a.dmgAbility === 'custom') dmgMult = Number(a.dmgMult);
-        const dmgAbilScore = a.dmgAbility === 'dex' ? m.dex : a.dmgAbility === 'cha' ? m.cha : m.str;
+        // Dex instead of Str to damage: unchained rogue finesse training, Fencing Grace (rapier), Dervish Dance (scimitar),
+        // Slashing Grace (the chosen weapon). Off-hand still adds half, as for Str (Double Slice: full).
+        const dexDmg = kind === 'melee' && !a.natural && (!a.dmgAbility || a.dmgAbility === 'auto') && dexDamageFor(a);
+        const dmgAbilScore = a.dmgAbility === 'dex' ? m.dex : a.dmgAbility === 'cha' ? m.cha : dexDmg ? Math.max(m.str, m.dex) : m.str;
         let dmgAbil = dmgMult === 0 ? 0 : (dmgAbilScore < 0 ? dmgAbilScore : Math.floor(dmgAbilScore * dmgMult));
         const ax = { ...a, _dmgMult: dmgMult, ...(house?.weaponGroups && !a.natural ? { weaponGroup: weaponGroup(a.name) } : {}) };
         const wmat = a.natural ? {} : (WEAPON_MATERIALS[a.material || ''] || {});

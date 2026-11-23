@@ -429,4 +429,31 @@ t('archetypes that cast: eldritch scoundrel uses the wizard list with the magus 
   assert.deepEqual(Object.fromEntries(cz.spellBudget[0].rows.map((r) => [r.level, r.limit])), { 0: 6, 1: 4, 2: 2 });
 });
 
+t('dex to damage (finesse training, fencing grace), off-hand half, 1-HD monsters replace their HD', () => {
+  loadWeaponList(load('pf-weapons.json'));
+  const ss = WEAPONS.find((w) => w.name === 'short sword');
+  const d = npc('pf1e', 'pf-rogue-unchained', 7, { abilities: { str: 10, dex: 18, con: 12, int: 14, wis: 10, cha: 10 } });
+  d.feats = [{ id: 'f', name: 'Two-Weapon Fighting', param: '', bonus: false }];
+  const a1 = { ...newAttack('melee', false), ...weaponAttackFields(ss, (x) => x), id: 'a1', enhancement: 1 };
+  d.attacks = [a1, { ...a1, id: 'a2', hands: 'off' }];
+  // human +2 Str → 12 (+1); Dex +4 replaces it: main hand +4+1, off-hand half (+2)+1
+  assert.match(compute(d, db).attacks.melee[0], /\(1d6\+5\/19–20\), \+1 short sword \+\d+ \(1d6\+3\//);
+  d.feats.push({ id: 'g', name: 'Double Slice', param: '', bonus: false });
+  assert.match(compute(d, db).attacks.melee[0], /\(1d6\+5\/19–20\), \+1 short sword \+\d+ \(1d6\+5\//);
+  // the plain rogue keeps Str; Fencing Grace gives Dex with a rapier
+  const r = npc('pf1e', 'pf-rogue', 5, { abilities: { str: 10, dex: 18, con: 12, int: 14, wis: 10, cha: 10 } });
+  r.feats = [{ id: 'f', name: 'Weapon Finesse', param: '', bonus: false }];
+  r.attacks = [{ ...newAttack('melee', false), ...weaponAttackFields(WEAPONS.find((w) => w.name === 'rapier'), (x) => x), id: 'r1' }];
+  assert.match(compute(r, db).attacks.melee[0], /1d6\+1\//);
+  r.feats.push({ id: 'g', name: 'Fencing Grace', param: '', bonus: false });
+  assert.match(compute(r, db).attacks.melee[0], /1d6\+4\//);
+  // a 1-HD humanoid with 7 rogue levels has 7 HD, not 8
+  const m = { ...newCreature('monster', 'pf1e'), type: 'humanoid', racialHD: 1, autoHD: false, classes: [{ id: 'c', classId: 'pf-rogue', level: 7 }] };
+  const cm = compute(m, db);
+  assert.equal(cm.hd, 7);
+  assert.ok(cm.racialHDReplaced);
+  m.racialHD = 3;
+  assert.equal(compute(m, db).hd, 10);
+});
+
 console.log(`${passed} class-effect tests passed`);

@@ -121,6 +121,9 @@ export const FEAT_EFFECTS = {
   'improved two-weapon fighting': { note: 'Segundo ataque com a mão inábil (−5).', flag: 'itwf' },
   'greater two-weapon fighting': { note: 'Terceiro ataque com a mão inábil (−10).', flag: 'gtwf' },
   'double slice': { note: 'Força total no dano da mão inábil.', flag: 'doubleSlice' },
+  'fencing grace': { note: 'Des em vez de For no dano com rapier (uma mão, outra livre).' },
+  'dervish dance': { note: 'Des em vez de For no ataque e dano com scimitar (sem escudo nem outra arma).' },
+  'slashing grace': { note: 'Des em vez de For no dano com a arma escolhida (escreva a arma no parâmetro do feat).' },
   'agile maneuvers': { note: 'Usa Des em vez de For no CMB.', flag: 'agileManeuvers' },
   'defensive combat training': { note: 'Usa HD total em vez de BAB no CMD.', flag: 'dct' },
   // ------------------------------------------------ defenses

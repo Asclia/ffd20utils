@@ -137,7 +137,13 @@ export const CLASS_EFFECTS = {
   'one with the sword': { fn: (x) => { const n = x.v || every(x.L, 5, 4); return { hooks: [(a) => (a.kind === 'melee' && EASTERN.test(a.name.toLowerCase()) ? { att: n, dmg: n } : null)], note: `+${n} com armas orientais.` }; } },
   'swashbuckler weapon training': { fn: (x) => { const n = x.v || every(x.L, 5, 4); return { hooks: [(a) => (a.kind === 'melee' && isPiercingLight(a) ? { att: n, dmg: n } : null)] }; } },
   'fencer weapon training': { fn: (x) => { const n = every(x.L, 5, 4); return n ? { hooks: [(a) => (a.kind === 'melee' && isPiercingLight(a) ? { att: n, dmg: n } : null)], flags: { finesse: true } } : { flags: { finesse: true } }; } },
-  'finesse training': { fn: () => ({ flags: { finesse: true }, note: 'Conta como Weapon Finesse.' }) },
+  // unchained rogue: Weapon Finesse at 1st; from 3rd, Dex instead of Str to damage with the chosen weapon type
+  'finesse training': {
+    toggles: [{ id: 'dex', label: 'Finesse Training: Des no dano (armas leves/finesse)', defaultOn: true }],
+    fn: (x) => (/rogue-unchained/.test(x.cls.id) && x.L >= 3 && x.on('dex')
+      ? { flags: { finesse: true, dexDamage: true }, note: 'Conta como Weapon Finesse; Des no dano com o tipo de arma escolhido (mais um no 11º, todos no 19º).' }
+      : { flags: { finesse: true }, note: 'Conta como Weapon Finesse.' }),
+  },
   'swashbuckler finesse': { fn: () => ({ flags: { finesse: true }, note: 'Conta como Weapon Finesse.' }) },
   'agile archer': { fn: () => ({ hooks: [(a, all, x) => (a.kind === 'ranged' && /bow|crossbow/i.test(a.name) ? { dmg: Math.max(0, x.m.dex) } : null)], note: 'Soma Des ao dano com arcos e bestas.' }) },
   'unarmed strike': { fn: (x) => (/^(pf-)?(monk|brawler|monk-unchained)$/.test(x.cls.id) ? { hooks: [unarmedHook(PF_MONK_DICE(x.L))], note: `Dano desarmado ${PF_MONK_DICE(x.L)}.` } : {}) },
